@@ -3,66 +3,119 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BikeStore Async</title>
-  <style>
-    :root { font-family: system-ui, sans-serif; color: #17323c; background: #f3f7f7; }
-    body { margin: 0; padding: 2rem 1rem; }
-    main { max-width: 32rem; margin: auto; padding: 2rem; background: white; border-radius: 1rem; box-shadow: 0 8px 30px #17323c12; }
-    h1 { margin-top: 0; }
-    label { display: block; margin: 1rem 0 .35rem; font-weight: 600; }
-    input { box-sizing: border-box; width: 100%; padding: .7rem; border: 1px solid #a7b8bb; border-radius: .4rem; font: inherit; }
-    button { margin-top: 1.4rem; padding: .8rem 1.2rem; border: 0; border-radius: .4rem; color: white; background: #087f74; font: inherit; cursor: pointer; }
-    button:disabled { opacity: .6; cursor: wait; }
-    #result { margin-top: 1.5rem; overflow-wrap: anywhere; }
-    .error { color: #a12626; }
-  </style>
+  <meta name="theme-color" content="#f7f5ef">
+  <meta name="description" content="BikeStore: una pequeña selección de bicicletas de montaña, ruta y ciudad. Demostración académica de pedidos asíncronos.">
+  <title>BikeStore — Bicicletas para salir más seguido</title>
+  <link rel="stylesheet" href="/css/store.css">
+  <script src="/js/store.js" defer></script>
 </head>
-<body>
+<body id="inicio">
+  <a class="skip-link" href="#catalogo">Ir al catálogo</a>
+
+  <div class="top-note">
+    <div class="wrap top-note__inner">
+      <span>Una pequeña tienda para grandes recorridos.</span>
+      <span>Proyecto académico · Catálogo de demostración</span>
+    </div>
+  </div>
+
+  <header class="site-header wrap">
+    <a class="wordmark" href="#inicio" aria-label="BikeStore, ir al inicio">BikeStore<span class="wordmark__dot">.</span></a>
+    <nav class="site-nav" aria-label="Navegación principal">
+      <a href="#catalogo">Bicicletas</a>
+      <a href="#pedido">Tu pedido</a>
+    </nav>
+  </header>
+
   <main>
-    <h1>Pedido de bicicleta</h1>
-    <p>Registra el pedido y conserva su identificador para consultar los registros del procesamiento.</p>
-    <form id="order-form">
-      <label for="email">Correo electrónico</label>
-      <input id="email" name="customerEmail" type="email" required>
-      <label for="model">Modelo de bicicleta</label>
-      <input id="model" name="bikeModel" required>
-      <label for="quantity">Cantidad</label>
-      <input id="quantity" name="quantity" type="number" min="1" step="1" value="1" required>
-      <label for="price">Precio unitario</label>
-      <input id="price" name="unitPrice" type="number" min="0.01" step="0.01" required>
-      <button type="submit">Confirmar pedido</button>
-    </form>
-    <p id="result" role="status" aria-live="polite"></p>
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero__copy">
+        <p class="eyebrow">Una selección para cada camino</p>
+        <h1 id="hero-title">La próxima salida empieza aquí.</h1>
+        <p class="hero__intro">Una bici para cruzar la ciudad, buscar una carretera tranquila o perder la cuenta de los senderos. Seis modelos, elegidos con calma.</p>
+        <a class="text-link" href="#catalogo">Explorar bicicletas <span aria-hidden="true">↗</span></a>
+      </div>
+      <figure class="hero__visual">
+        <img src="/images/ruta-clara.jpg" alt="Bicicleta de ruta clara apoyada frente a una pared cálida" width="1200" height="900" fetchpriority="high">
+        <figcaption>Hechas para volver a tomar el camino largo.</figcaption>
+      </figure>
+    </section>
+
+    <div class="section-rule wrap" aria-hidden="true"><span>01 / La colección</span><span>BikeStore</span></div>
+
+    <div class="shop-layout wrap">
+      <section class="catalog" id="catalogo" aria-labelledby="catalog-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Bicicletas</p>
+            <h2 id="catalog-title">Una colección pequeña, para salir más.</h2>
+          </div>
+          <p>Del pavimento al camino de tierra. Encuentra la que encaja con tus días.</p>
+        </div>
+
+        <div class="catalog-toolbar">
+          <div class="filters" role="group" aria-label="Filtrar bicicletas por categoría">
+            <button type="button" class="filter is-active" data-filter="todas" aria-pressed="true">Todas</button>
+            <button type="button" class="filter" data-filter="montaña" aria-pressed="false">Montaña</button>
+            <button type="button" class="filter" data-filter="ruta" aria-pressed="false">Ruta</button>
+            <button type="button" class="filter" data-filter="urbana" aria-pressed="false">Urbana</button>
+          </div>
+          <p class="catalog-count" id="catalog-count" role="status" aria-live="polite">6 bicicletas</p>
+        </div>
+
+        <div class="product-grid" id="product-grid"></div>
+      </section>
+
+      <aside class="order-panel" id="pedido" aria-labelledby="order-title">
+        <div class="order-panel__inner">
+          <p class="eyebrow">02 / Tu selección</p>
+          <h2 id="order-title" tabindex="-1">Prepara tu pedido.</h2>
+          <p class="order-panel__intro">Elige una bicicleta del catálogo y confirma los datos para ponerla en marcha.</p>
+
+          <div class="selection-empty" id="selection-empty">
+            <span class="selection-empty__line" aria-hidden="true"></span>
+            <p>Aún no has elegido una bicicleta.</p>
+            <a href="#catalogo">Ver el catálogo <span aria-hidden="true">↗</span></a>
+          </div>
+
+          <div class="selection" id="selection" hidden aria-live="polite">
+            <div class="selection__top">
+              <img id="selection-image" alt="" width="90" height="90">
+              <div>
+                <span id="selection-category" class="selection__category"></span>
+                <strong id="selection-name"></strong>
+                <span id="selection-price"></span>
+              </div>
+            </div>
+          </div>
+
+          <form id="order-form" novalidate>
+            <div class="field">
+              <label for="quantity">Cantidad</label>
+              <input id="quantity" name="quantity" type="number" min="1" step="1" inputmode="numeric" value="1" required disabled>
+            </div>
+            <div class="field">
+              <label for="email">Correo electrónico</label>
+              <input id="email" name="customerEmail" type="email" autocomplete="email" placeholder="tu@correo.com" required disabled>
+            </div>
+            <div class="order-total" aria-live="polite">
+              <span>Total de demostración</span>
+              <strong id="total">—</strong>
+            </div>
+            <button class="submit-button" id="submit-button" type="submit" disabled>Confirmar pedido <span aria-hidden="true">↗</span></button>
+            <p class="form-note">Los precios son ficticios. El navegador envía el precio al API; no existe una validación comercial segura en esta demostración.</p>
+            <p class="form-feedback" id="form-feedback" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </aside>
+    </div>
   </main>
-  <script>
-    const form = document.querySelector('#order-form');
-    const result = document.querySelector('#result');
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const button = form.querySelector('button');
-      button.disabled = true;
-      result.className = '';
-      result.textContent = 'Registrando pedido…';
-      const data = Object.fromEntries(new FormData(form));
-      data.quantity = Number(data.quantity);
-      data.unitPrice = Number(data.unitPrice);
-      try {
-        const response = await fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const order = await response.json();
-        result.textContent = `Pedido recibido. Identificador: ${order.pedidoId}`;
-        form.reset();
-      } catch (error) {
-        result.className = 'error';
-        result.textContent = `No se pudo registrar el pedido (${error.message}). Revisa los datos y la conexión.`;
-      } finally {
-        button.disabled = false;
-      }
-    });
-  </script>
+
+  <footer class="site-footer">
+    <div class="wrap site-footer__inner">
+      <div><strong>BikeStore.</strong><span> Un proyecto académico sobre pedidos asíncronos.</span></div>
+      <p>Modelos y precios ficticios · Fotografías ilustrativas</p>
+    </div>
+  </footer>
 </body>
 </html>
