@@ -6,11 +6,17 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +27,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 
 import com.bikestore.asyncapp.config.RabbitTopology;
+import com.bikestore.asyncapp.email.EmailSender;
 import com.bikestore.asyncapp.messaging.ConfirmedPublisher;
+import com.bikestore.asyncapp.messaging.OrderEventLogger;
 import com.bikestore.asyncapp.model.FailedPayment;
 import com.bikestore.asyncapp.model.OrderMessage;
 import com.bikestore.asyncapp.model.PaymentResult;
@@ -31,7 +39,10 @@ import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @Import(PaymentIntegrationTest.DeterministicConfig.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PaymentIntegrationTest {
+    private final String auditQueue = "bikestore.test.paid." + UUID.randomUUID();
+
     @Autowired
     RabbitAdmin admin;
 
@@ -47,39 +58,58 @@ class PaymentIntegrationTest {
     @Autowired
     ScriptedDecision decision;
 
+    @Autowired
+    RecordingEmailSender sender;
+
+    @BeforeAll
+    void bindAuditQueue() {
+        admin.declareQueue(new Queue(auditQueue, true));
+        admin.declareBinding(new Binding(auditQueue, Binding.DestinationType.QUEUE,
+                RabbitTopology.EVENT_EXCHANGE, RabbitTopology.PAID_KEY, null));
+    }
+
+    @AfterAll
+    void removeAuditQueue() {
+        admin.deleteQueue(auditQueue);
+    }
+
     @BeforeEach
     void clearQueues() {
         for (String queue : new String[] {RabbitTopology.PAYMENT_QUEUE, RabbitTopology.RETRY_QUEUE,
                 RabbitTopology.PAID_QUEUE, RabbitTopology.DEAD_QUEUE}) {
             admin.purgeQueue(queue, true);
         }
+        admin.purgeQueue(auditQueue, true);
         decision.calls.clear();
+        sender.sent.clear();
     }
 
     @Test
-    void firstAttemptPublishesPaidEvent() {
+    void firstAttemptPublishesPaidEvent() throws Exception {
         String id = submit("PASS1");
         PaymentResult paid = readPaid();
         assertThat(paid.pedidoId()).isEqualTo(id);
         assertThat(paid.paymentStatus()).isEqualTo("PAID");
         assertThat(paid.attempts()).isEqualTo(1);
         assertThat(decision.count(id)).isEqualTo(1);
+        awaitEmail(id);
         assertThat(template.receive(RabbitTopology.DEAD_QUEUE, 100)).isNull();
     }
 
     @Test
-    void failedAttemptIsRetriedAndThirdAttemptPays() {
+    void failedAttemptIsRetriedAndThirdAttemptPays() throws Exception {
         String id = submit("PASS3");
         PaymentResult paid = readPaid();
         assertThat(paid.pedidoId()).isEqualTo(id);
         assertThat(paid.paymentStatus()).isEqualTo("PAID");
         assertThat(paid.attempts()).isEqualTo(3);
         assertThat(decision.count(id)).isEqualTo(3);
+        awaitEmail(id);
         assertThat(template.receive(RabbitTopology.DEAD_QUEUE, 100)).isNull();
     }
 
     @Test
-    void fourFailuresReachDeadLetterQueue() {
+    void fourFailuresReachDeadLetterQueue() throws Exception {
         String id = submit("FAIL4");
         Message message = template.receive(RabbitTopology.DEAD_QUEUE, 10000);
         assertThat(message).isNotNull();
@@ -89,7 +119,21 @@ class PaymentIntegrationTest {
         assertThat(failed.reason()).contains("cuatro intentos");
         assertThat(message.getMessageProperties().getHeaders().get("failedAttempts")).isEqualTo(4);
         assertThat(decision.count(id)).isEqualTo(4);
-        assertThat(template.receive(RabbitTopology.PAID_QUEUE, 100)).isNull();
+        assertThat(template.receive(auditQueue, 100)).isNull();
+        Thread.sleep(200);
+        assertThat(sender.sent).doesNotContain(id);
+    }
+
+    @Test
+    void emailIgnoresPendingPayment() throws Exception {
+        String id = UUID.randomUUID().toString();
+        PaymentResult pending = new PaymentResult(id, "test@example.com", "PENDING",
+                "PENDING", 1, Instant.now());
+        publisher.publish(RabbitTopology.EVENT_EXCHANGE, RabbitTopology.PAID_KEY,
+                id, pending, null);
+        assertThat(template.receive(auditQueue, 5000)).isNotNull();
+        Thread.sleep(300);
+        assertThat(sender.sent).doesNotContain(id);
     }
 
     private String submit(String model) {
@@ -101,9 +145,17 @@ class PaymentIntegrationTest {
     }
 
     private PaymentResult readPaid() {
-        Message message = template.receive(RabbitTopology.PAID_QUEUE, 10000);
+        Message message = template.receive(auditQueue, 10000);
         assertThat(message).isNotNull();
         return mapper.readValue(message.getBody(), PaymentResult.class);
+    }
+
+    private void awaitEmail(String id) throws Exception {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        while (!sender.sent.contains(id) && System.nanoTime() < deadline) {
+            Thread.sleep(25);
+        }
+        assertThat(sender.sent).contains(id);
     }
 
     @TestConfiguration
@@ -112,6 +164,12 @@ class PaymentIntegrationTest {
         @Primary
         ScriptedDecision scriptedDecision() {
             return new ScriptedDecision();
+        }
+
+        @Bean
+        @Primary
+        RecordingEmailSender recordingEmailSender(OrderEventLogger events) {
+            return new RecordingEmailSender(events);
         }
     }
 
@@ -130,6 +188,21 @@ class PaymentIntegrationTest {
 
         int count(String id) {
             return calls.get(id).get();
+        }
+    }
+
+    static class RecordingEmailSender implements EmailSender {
+        final ConcurrentLinkedQueue<String> sent = new ConcurrentLinkedQueue<>();
+        final OrderEventLogger events;
+
+        RecordingEmailSender(OrderEventLogger events) {
+            this.events = events;
+        }
+
+        @Override
+        public void sendConfirmation(PaymentResult payment) {
+            sent.add(payment.pedidoId());
+            events.info(payment.pedidoId(), "EMAIL_SENT", "Confirmación simulada en prueba");
         }
     }
 }
