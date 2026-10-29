@@ -1,103 +1,86 @@
-const products = [
-  {
-    id: 'sendero-norte',
-    name: 'Sendero Norte',
-    category: 'montaña',
-    price: 920,
-    description: 'Para dejar atrás el asfalto y seguir el camino sin prisa.',
-    image: '/images/sendero-norte.jpg',
-    alt: 'Bicicleta de montaña oscura en un sendero de bosque'
-  },
-  {
-    id: 'ruta-clara',
-    name: 'Ruta Clara',
-    category: 'ruta',
-    price: 1050,
-    description: 'Ligera de espíritu, lista para madrugadas y kilómetros nuevos.',
-    image: '/images/ruta-clara.jpg',
-    alt: 'Bicicleta de ruta blanca apoyada frente a una pared clara'
-  },
-  {
-    id: 'ciudad-verde',
-    name: 'Ciudad Verde',
-    category: 'urbana',
-    price: 640,
-    description: 'Una compañera sencilla para recados, cafés y trayectos diarios.',
-    image: '/images/ciudad-verde.jpg',
-    alt: 'Bicicleta urbana verde junto a una pared de ladrillo'
-  },
-  {
-    id: 'cerro-rojo',
-    name: 'Cerro Rojo',
-    category: 'montaña',
-    price: 1120,
-    description: 'Con ganas de subir, bajar y descubrir otra salida el domingo.',
-    image: '/images/cerro-rojo.jpg',
-    alt: 'Bicicleta de montaña negra y roja junto a un muro exterior',
-    imagePosition: 'center 73%'
-  },
-  {
-    id: 'ruta-carmesi',
-    name: 'Ruta Carmesí',
-    category: 'ruta',
-    price: 890,
-    description: 'Para quien prefiere el sonido de las ruedas al del tráfico.',
-    image: '/images/ruta-carmesi.jpg',
-    alt: 'Bicicleta de ruta roja apoyada en una pared de hormigón'
-  },
-  {
-    id: 'ciudad-gris',
-    name: 'Ciudad Gris',
-    category: 'urbana',
-    price: 720,
-    description: 'Cómoda para cruzar el barrio y volver por la calle bonita.',
-    image: '/images/ciudad-gris.jpg',
-    alt: 'Bicicleta urbana gris estacionada en una calle soleada'
-  }
-];
-
 const money = new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' });
-const grid = document.querySelector('#product-grid');
-const count = document.querySelector('#catalog-count');
+const categoryNames = { gravel: 'Gravel', ruta: 'Ruta', 'montaña': 'Montaña', urbana: 'Ciudad' };
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const $ = selector => document.querySelector(selector);
+const grid = $('#product-grid');
+const count = $('#catalog-count');
 const filters = [...document.querySelectorAll('.filter')];
-const form = document.querySelector('#order-form');
-const quantity = document.querySelector('#quantity');
-const email = document.querySelector('#email');
-const total = document.querySelector('#total');
-const button = document.querySelector('#submit-button');
-const feedback = document.querySelector('#form-feedback');
-const orderTitle = document.querySelector('#order-title');
+const form = $('#order-form');
+const quantity = $('#quantity');
+const email = $('#email');
+const total = $('#total');
+const button = $('#submit-button');
+const feedback = $('#form-feedback');
+const orderTitle = $('#order-title');
+const pickbar = $('#pickbar');
 let selected = null;
 let activeFilter = 'todas';
 let sending = false;
+
+const findProduct = id => products.find(product => product.id === id);
 
 function showFeedback(message, kind = '') {
   feedback.className = `form-feedback${kind ? ` is-${kind}` : ''}`;
   feedback.textContent = message;
 }
 
+/* ---------- Catálogo ---------- */
+
+function cardHtml(product) {
+  const chosen = selected?.id === product.id;
+  return `
+    <div class="card__media">
+      <img src="${product.image}" alt="${product.alt}" loading="lazy" width="1600" height="1200" style="object-position:${product.focus}">
+    </div>
+    <div class="card__body">
+      <div class="card__title">
+        <h3>${product.name}</h3>
+        <span class="card__price">${money.format(product.price)}</span>
+      </div>
+      <p class="card__category">${categoryNames[product.category]} · ${product.specs[0]}</p>
+      <p class="card__desc">${product.description}</p>
+      <p class="card__specs">${product.specs.slice(1).join(' · ')}</p>
+      <button type="button" class="link-button${chosen ? ' is-selected' : ''}" data-product="${product.id}" aria-pressed="${chosen}" aria-label="${chosen ? `${product.name}, elegida` : `Elegir ${product.name}`}">${chosen ? 'Elegida' : 'Elegir'}</button>
+    </div>`;
+}
+
 function renderCatalog() {
   const visible = products.filter(product => activeFilter === 'todas' || product.category === activeFilter);
   grid.replaceChildren(...visible.map(product => {
     const article = document.createElement('article');
-    const chosen = selected?.id === product.id;
-    article.className = 'product-card';
-    article.innerHTML = `
-      <div class="product-card__image">
-        <img src="${product.image}" alt="${product.alt}" loading="lazy" width="1200" height="850">
-      </div>
-      <div class="product-card__meta"><span>${product.category}</span><span>Modelo de demostración</span></div>
-      <h3>${product.name}</h3>
-      <p class="product-card__description">${product.description}</p>
-      <div class="product-card__bottom">
-        <strong>${money.format(product.price)}</strong>
-        <button type="button" data-product="${product.id}" aria-label="${chosen ? `${product.name} seleccionada` : `Elegir ${product.name}`}" aria-pressed="${chosen}" class="${chosen ? 'is-selected' : ''}">${chosen ? 'Elegida' : 'Elegir bicicleta'}</button>
-      </div>`;
-    if (product.imagePosition) article.querySelector('img').style.objectPosition = product.imagePosition;
+    article.className = `card${selected?.id === product.id ? ' is-selected' : ''}`;
+    article.dataset.id = product.id;
+    article.innerHTML = cardHtml(product);
     return article;
   }));
   count.textContent = `${visible.length} ${visible.length === 1 ? 'bicicleta' : 'bicicletas'}`;
 }
+
+function setFilter(filter) {
+  if (filter.dataset.filter === activeFilter) return;
+  activeFilter = filter.dataset.filter;
+  filters.forEach(item => {
+    const current = item === filter;
+    item.classList.toggle('is-active', current);
+    item.setAttribute('aria-pressed', String(current));
+  });
+  if (reduceMotion) { renderCatalog(); return; }
+  grid.classList.add('is-changing');
+  setTimeout(() => {
+    renderCatalog();
+    grid.classList.remove('is-changing');
+  }, 220);
+}
+
+filters.forEach(filter => filter.addEventListener('click', () => setFilter(filter)));
+
+grid.addEventListener('click', event => {
+  const choice = event.target.closest('button[data-product]');
+  if (choice) chooseProduct(findProduct(choice.dataset.product));
+});
+
+/* ---------- Selección y pedido ---------- */
 
 function updateTotal() {
   const units = Number(quantity.value);
@@ -107,43 +90,78 @@ function updateTotal() {
   return valid;
 }
 
-function chooseProduct(product) {
+function chooseProduct(product, { scroll = false } = {}) {
+  if (!product) return;
+  const changed = selected?.id !== product.id;
   selected = product;
-  document.querySelector('#selection-empty').hidden = true;
-  document.querySelector('#selection').hidden = false;
-  document.querySelector('#selection-image').src = product.image;
-  document.querySelector('#selection-image').alt = product.alt;
-  document.querySelector('#selection-category').textContent = product.category;
-  document.querySelector('#selection-name').textContent = product.name;
-  document.querySelector('#selection-price').textContent = `${money.format(product.price)} por unidad`;
+
+  const image = $('#order-image');
+  if (changed) {
+    image.hidden = false;
+    $('#order-placeholder').hidden = true;
+    image.classList.remove('is-in');
+    image.src = product.image;
+    image.alt = product.alt;
+    image.style.objectPosition = product.focus;
+    requestAnimationFrame(() => requestAnimationFrame(() => image.classList.add('is-in')));
+  }
+  $('#sum-model').textContent = `${product.name} · ${categoryNames[product.category]}`;
+  $('#sum-price').textContent = money.format(product.price);
   quantity.disabled = false;
   email.disabled = false;
   button.disabled = false;
-  quantity.value = '1';
+  if (changed) quantity.value = '1';
   showFeedback('');
   updateTotal();
-  renderCatalog();
-  if (window.matchMedia('(max-width: 820px)').matches) {
-    document.querySelector('#pedido').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  showOrderForm();
+
+  pickbar.hidden = false;
+  $('#pickbar-name').textContent = product.name;
+  $('#pickbar-price').textContent = money.format(product.price);
+
+  // Actualiza solo la ficha afectada para no reiniciar el scroll ni el foco del catálogo.
+  grid.querySelectorAll('.card').forEach(card => {
+    const chosen = card.dataset.id === product.id;
+    card.classList.toggle('is-selected', chosen);
+    const choose = card.querySelector('button[data-product]');
+    choose.classList.toggle('is-selected', chosen);
+    choose.textContent = chosen ? 'Elegida' : 'Elegir';
+    choose.setAttribute('aria-pressed', String(chosen));
+    const name = findProduct(card.dataset.id).name;
+    choose.setAttribute('aria-label', chosen ? `${name}, elegida` : `Elegir ${name}`);
+  });
+
+  if (scroll) {
+    $('#pedido').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    orderTitle.focus({ preventScroll: true });
   }
-  orderTitle.focus({ preventScroll: true });
 }
 
-filters.forEach(filter => filter.addEventListener('click', () => {
-  activeFilter = filter.dataset.filter;
-  filters.forEach(item => {
-    const current = item === filter;
-    item.classList.toggle('is-active', current);
-    item.setAttribute('aria-pressed', String(current));
-  });
-  renderCatalog();
-}));
+function showOrderForm() {
+  $('#confirmation').hidden = true;
+  $('#order-flow').hidden = false;
+}
 
-grid.addEventListener('click', event => {
-  const choice = event.target.closest('button[data-product]');
-  if (!choice) return;
-  const product = products.find(item => item.id === choice.dataset.product);
-  if (product) chooseProduct(product);
+document.querySelectorAll('[data-choose]').forEach(control => {
+  control.addEventListener('click', () => chooseProduct(findProduct(control.dataset.choose)));
+});
+
+document.querySelectorAll('[data-price]').forEach(node => {
+  node.textContent = money.format(findProduct(node.dataset.price).price);
+});
+
+// Un enlace de las piezas destacadas lleva al catálogo y resalta la ficha.
+document.querySelectorAll('[data-pick]').forEach(link => {
+  link.addEventListener('click', () => {
+    if (activeFilter !== 'todas') setFilter(filters[0]);
+    setTimeout(() => {
+      const card = grid.querySelector(`[data-id="${link.dataset.pick}"]`);
+      if (!card) return;
+      card.classList.add('is-flagged');
+      setTimeout(() => card.classList.remove('is-flagged'), 1800);
+      card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+    }, activeFilter === 'todas' ? 0 : 300);
+  });
 });
 
 quantity.addEventListener('input', () => {
@@ -174,6 +192,7 @@ form.addEventListener('submit', async event => {
     return;
   }
 
+  // Contrato del API: customerEmail, bikeModel, quantity, unitPrice.
   const payload = {
     customerEmail: email.value.trim(),
     bikeModel: selected.name,
@@ -183,7 +202,8 @@ form.addEventListener('submit', async event => {
 
   sending = true;
   button.disabled = true;
-  button.firstChild.textContent = 'Enviando pedido ';
+  button.classList.add('is-busy');
+  button.textContent = 'Enviando pedido';
   showFeedback('Registrando tu pedido…', 'loading');
   try {
     const response = await fetch('/api/orders', {
@@ -197,14 +217,81 @@ form.addEventListener('submit', async event => {
     }
     const order = await response.json();
     if (!order.pedidoId) throw new Error('No recibimos un identificador del pedido. Revisa los registros antes de repetirlo.');
-    showFeedback(`Pedido recibido: ${order.pedidoId}. El pago se procesa de forma asíncrona; conserva este identificador para seguirlo en los registros.`);
+    showConfirmation(order.pedidoId, payload);
   } catch (error) {
     showFeedback(error instanceof TypeError ? 'No pudimos conectar con la tienda. Comprueba tu conexión e inténtalo otra vez.' : error.message, 'error');
   } finally {
     sending = false;
-    button.disabled = false;
-    button.firstChild.textContent = 'Confirmar pedido ';
+    button.disabled = !selected;
+    button.classList.remove('is-busy');
+    button.textContent = 'Confirmar pedido';
   }
 });
+
+function showConfirmation(id, payload) {
+  const panel = $('#confirmation');
+  $('#confirmation-id').textContent = id;
+  $('#confirmation-detail').textContent =
+    `${payload.quantity} × ${payload.bikeModel} · ${money.format(payload.quantity * payload.unitPrice)} · ${payload.customerEmail}`;
+  showFeedback('');
+  $('#order-flow').hidden = true;
+  panel.hidden = false;
+  panel.classList.remove('is-in');
+  requestAnimationFrame(() => requestAnimationFrame(() => panel.classList.add('is-in')));
+  panel.focus({ preventScroll: true });
+  panel.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+}
+
+$('#new-order').addEventListener('click', () => {
+  email.value = '';
+  quantity.value = '1';
+  updateTotal();
+  showOrderForm();
+  email.focus();
+});
+
+/* ---------- Navegación, encabezado y revelados ---------- */
+
+const header = $('#site-header');
+const toggle = $('#menu-toggle');
+const nav = $('#site-nav');
+
+function setMenu(open) {
+  toggle.setAttribute('aria-expanded', String(open));
+  toggle.querySelector('.menu-toggle__label').textContent = open ? 'Cerrar' : 'Menú';
+  header.classList.toggle('is-open', open);
+  document.body.classList.toggle('menu-open', open);
+}
+toggle.addEventListener('click', () => setMenu(toggle.getAttribute('aria-expanded') !== 'true'));
+nav.addEventListener('click', event => { if (event.target.closest('a')) setMenu(false); });
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+    setMenu(false);
+    toggle.focus();
+  }
+});
+
+const hero = $('#inicio');
+new IntersectionObserver(([entry]) => {
+  header.classList.toggle('is-solid', !entry.isIntersecting);
+}, { rootMargin: '-72px 0px 0px 0px' }).observe(hero);
+
+// La barra de selección se oculta cuando el pedido ya está a la vista.
+new IntersectionObserver(([entry]) => {
+  pickbar.classList.toggle('is-away', entry.isIntersecting);
+}, { threshold: 0.25 }).observe($('#pedido'));
+
+const revealItems = document.querySelectorAll('[data-reveal]');
+if (reduceMotion || !('IntersectionObserver' in window)) {
+  revealItems.forEach(item => item.classList.add('is-visible'));
+} else {
+  const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('is-visible');
+      observer.unobserve(entry.target);
+    }
+  }), { threshold: 0.2 });
+  revealItems.forEach(item => observer.observe(item));
+}
 
 renderCatalog();

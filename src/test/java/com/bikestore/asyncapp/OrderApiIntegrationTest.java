@@ -100,7 +100,7 @@ class OrderApiIntegrationTest {
         HttpResponse<String> stylesheet = client.send(stylesheetRequest,
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         assertThat(stylesheet.statusCode()).isEqualTo(200);
-        assertThat(stylesheet.body()).contains(".product-card", ".order-panel");
+        assertThat(stylesheet.body()).contains(".card", ".order__panel");
 
         HttpRequest imageRequest = HttpRequest.newBuilder(
                 URI.create("http://localhost:" + port + "/images/ruta-clara.jpg")).GET().build();
