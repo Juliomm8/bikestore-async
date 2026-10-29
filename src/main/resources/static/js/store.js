@@ -30,8 +30,8 @@ function showFeedback(message, kind = '') {
 function cardHtml(product) {
   const chosen = selected?.id === product.id;
   return `
-    <div class="card__media">
-      <img src="${product.image}" alt="${product.alt}" loading="lazy" width="1600" height="1200" style="object-position:${product.focus}">
+    <div class="card__media" style="--image-fit:${product.imageFit};--image-position:${product.imagePosition};--image-scale:${product.imageScale};--image-background:${product.imageBackground}">
+      <img src="${product.image}" alt="${product.alt}" loading="lazy" width="${product.imageWidth}" height="${product.imageHeight}">
     </div>
     <div class="card__body">
       <div class="card__title">
@@ -102,7 +102,10 @@ function chooseProduct(product, { scroll = false } = {}) {
     image.classList.remove('is-in');
     image.src = product.image;
     image.alt = product.alt;
-    image.style.objectPosition = product.focus;
+    image.style.objectFit = product.imageFit;
+    image.style.objectPosition = product.imagePosition;
+    image.style.setProperty('--image-scale', product.imageScale);
+    $('#order-figure').style.backgroundColor = product.imageBackground;
     requestAnimationFrame(() => requestAnimationFrame(() => image.classList.add('is-in')));
   }
   $('#sum-model').textContent = `${product.name} · ${categoryNames[product.category]}`;

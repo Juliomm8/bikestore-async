@@ -30,7 +30,10 @@
 
   <main>
     <section class="hero" id="inicio" aria-labelledby="hero-title">
-      <img class="hero__image" src="/images/mirador.jpg" alt="Bicicleta de gravel apoyada en una cumbre frente a un valle amplio y un cielo con nubes" width="1600" height="1200" fetchpriority="high">
+      <picture class="hero__media">
+        <source media="(max-width: 960px)" srcset="/images/mirador-catalog.jpg" width="960" height="640">
+        <img class="hero__image" src="/images/mirador.jpg" alt="Bicicleta de gravel apoyada en una cumbre frente a un valle amplio y un cielo con nubes" width="1600" height="1200" fetchpriority="high">
+      </picture>
       <div class="hero__shade" aria-hidden="true"></div>
       <div class="hero__content">
         <h1 id="hero-title"><span class="line"><span>Para los caminos</span></span> <span class="line"><span><em>que no tienen prisa.</em></span></span></h1>
@@ -70,8 +73,8 @@
           </div>
         </article>
         <article class="feature feature--small feature--offset" data-reveal>
-          <a class="feature__media" href="#catalogo" data-pick="ciudad-verde" aria-label="Ver Ciudad Verde en el catálogo">
-            <img src="/images/ciudad-verde.jpg" alt="Bicicleta urbana verde junto a una pared de ladrillo" loading="lazy" width="1200" height="850">
+          <a class="feature__media feature__media--close" href="#catalogo" data-pick="ciudad-verde" aria-label="Ver Ciudad Verde en el catálogo">
+            <img src="/images/ciudad-verde.jpg" alt="Bicicleta urbana verde junto a una pared de ladrillo" loading="lazy" width="1200" height="800">
           </a>
           <div class="feature__text">
             <h3>Ciudad Verde</h3>
