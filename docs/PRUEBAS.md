@@ -99,3 +99,39 @@ Con la aplicación real y Google Chrome controlado por Playwright (escritorio 14
 | Desbordamiento horizontal | No hubo en 390 px en portada, selección, catálogo, pedido y pie. |
 
 No se probó con lectores de pantalla ni en Firefox/Safari. Las animaciones respetan `prefers-reduced-motion` por CSS y JavaScript, pero esa preferencia no se activó en el navegador durante la revisión.
+
+## Encuadres y revisión responsive (29 de octubre de 2026)
+
+Se inspeccionaron individualmente los doce archivos de producto y las tres imágenes de la selección en Chromium, con Spring Boot ya activo en `http://localhost:8080/`. Las fotos locales de catálogo, destacados y pedido se comprobaron con el encuadre final. Las capturas completas se guardaron bajo `target/ui-review/capturas/`; ese directorio está ignorado por Git y no forma parte de la entrega versionada.
+
+| Vista comprobada | Composición medida | Carga y desbordamiento |
+| --- | --- | --- |
+| 360 × 800 | Catálogo de una columna; cabecera y pedido en una columna; foto de cabecera con `contain`. | 12 fichas y 16 imágenes locales cargadas; sin desplazamiento horizontal. |
+| 390 × 844 | Catálogo de una columna; cabecera y pedido en una columna; foto de cabecera con `contain`. | 12 fichas y 16 imágenes locales cargadas; sin desplazamiento horizontal. |
+| 768 × 1024 | Catálogo de dos columnas; selección apilada; pedido de una columna. | 12 fichas y 16 imágenes locales cargadas; sin desplazamiento horizontal. |
+| 1366 × 900 | Catálogo de tres columnas; pedido de dos columnas; cabecera panorámica. | 12 fichas y 16 imágenes locales cargadas; sin desplazamiento horizontal. |
+| 1440 × 900 | Catálogo de tres columnas; pedido de dos columnas; cabecera panorámica. | 12 fichas y 16 imágenes locales cargadas; sin desplazamiento horizontal. |
+| 1920 × 1080 | Catálogo de tres columnas; pedido de dos columnas; cabecera panorámica. | 12 fichas y 16 imágenes locales cargadas; sin desplazamiento horizontal. |
+
+Los nombres de las capturas son `360-movil.jpeg`, `390-movil.jpeg`, `768-tablet.jpeg`, `1366-portatil.jpeg`, `1440-escritorio.jpeg` y `1920-pantalla-grande.jpeg`. A 360, 390 y 768 px la cabecera usa una variante local más cercana de Mirador con `object-fit: contain`; en escritorio mantiene la toma panorámica. Las tarjetas y el resumen del pedido mantienen las doce bicicletas completas, sin deformarlas. En todas las imágenes de catálogo se verificó que la imagen decodificada corresponde al archivo local esperado.
+
+| Interacción comprobada en móvil | Resultado observado |
+| --- | --- |
+| Menú con teclado | El botón pasó `aria-expanded` a `true`, mostró sus tres enlaces; `Escape` lo cerró y devolvió el foco al botón. |
+| Filtro Montaña | Mostró exactamente `Sendero Norte` y `Cerro Rojo`; al restaurar «Todas» aparecieron las doce bicicletas. |
+| Selección y cantidad | `Ruta Carmesí`, cantidad 2, precio unitario `$890,00` y total `$1.780,00`. El resumen cargó `ruta-carmesi-catalog.jpg` (800 × 610) con `object-fit: contain`. |
+| Correo inválido | `no-es-correo` mostró `Ingresa un correo electrónico válido.` y no envió un POST. |
+| Áreas táctiles | Botón de menú y botones «Elegir» de al menos 44 px; filtros de 48 px en la medición de 360 px. |
+| Servidor y consola | `GET /` devolvió HTTP `200`; `HEAD /images/ruta-carmesi-catalog.jpg` devolvió HTTP `200` (`image/jpeg`); Chromium no mostró errores ni advertencias de consola. |
+
+Comprobaciones de código ejecutadas desde PowerShell:
+
+```powershell
+node --check src/main/resources/static/js/catalog.js
+node --check src/main/resources/static/js/store.js
+git diff --check
+.\mvnw.cmd -q -Dtest=OrderEventLoggerTest test
+.\mvnw.cmd -q -DskipTests package
+```
+
+Los dos `node --check`, `git diff --check`, la prueba unitaria `OrderEventLoggerTest` (1 correcta) y el empaquetado Maven terminaron correctamente. No se ejecutaron en esta revisión `OrderApiIntegrationTest` ni `PaymentIntegrationTest`: hay una instancia de BikeStore activa en el puerto 8080 y las preparaciones de esas pruebas vacían colas RabbitMQ compartidas. La revisión no creó pedidos ni purgó colas. El bloque CSS `prefers-reduced-motion` y la consulta JavaScript `matchMedia` siguen presentes; el control Chromium disponible no ofrece emulación de esa preferencia, por lo que no se afirma que se haya comprobado visualmente con el sistema operativo configurado para movimiento reducido.
