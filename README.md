@@ -33,6 +33,12 @@ Get-Content .env | ForEach-Object {
 
 Abre [http://localhost:8080/](http://localhost:8080/) para usar el formulario. El panel de RabbitMQ está en [http://localhost:15672/](http://localhost:15672/); utiliza las credenciales locales de `.env`.
 
+## Catálogo y formulario
+
+La página principal muestra seis bicicletas ficticias de montaña, ruta y uso urbano. Puedes filtrar las categorías, elegir un modelo y ajustar la cantidad; el total se actualiza en pantalla antes de enviar `customerEmail`, `bikeModel`, `quantity` y `unitPrice` a `POST /api/orders`. Tras recibir el `pedidoId`, la página aclara que el pago continúa de forma asíncrona. Las fotografías se sirven desde el proyecto y su procedencia está en [docs/IMAGENES.md](docs/IMAGENES.md).
+
+Este catálogo es una demostración académica. Sus precios provienen del JavaScript del navegador y el backend no los valida contra un catálogo comercial de confianza.
+
 ## API
 
 `POST /api/orders` recibe JSON. Un pedido válido responde `202 Accepted`:

@@ -85,7 +85,28 @@ class OrderApiIntegrationTest {
         HttpResponse<String> response = client.send(request,
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).contains("Pedido de bicicleta", "order-form", "/api/orders");
+        assertThat(response.body()).contains("BikeStore", "product-grid", "order-form",
+                "/css/store.css", "/js/store.js");
+
+        HttpRequest scriptRequest = HttpRequest.newBuilder(
+                URI.create("http://localhost:" + port + "/js/store.js")).GET().build();
+        HttpResponse<String> script = client.send(scriptRequest,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertThat(script.statusCode()).isEqualTo(200);
+        assertThat(script.body()).contains("/api/orders", "customerEmail", "bikeModel", "unitPrice");
+
+        HttpRequest stylesheetRequest = HttpRequest.newBuilder(
+                URI.create("http://localhost:" + port + "/css/store.css")).GET().build();
+        HttpResponse<String> stylesheet = client.send(stylesheetRequest,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertThat(stylesheet.statusCode()).isEqualTo(200);
+        assertThat(stylesheet.body()).contains(".product-card", ".order-panel");
+
+        HttpRequest imageRequest = HttpRequest.newBuilder(
+                URI.create("http://localhost:" + port + "/images/ruta-clara.jpg")).GET().build();
+        HttpResponse<byte[]> image = client.send(imageRequest, HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(image.statusCode()).isEqualTo(200);
+        assertThat(image.body().length).isGreaterThan(10_000);
     }
 
     private HttpResponse<String> post(String body) throws Exception {
