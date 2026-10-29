@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BikeStore Async</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #17323c; background: #f3f7f7; }
+    body { margin: 0; padding: 2rem 1rem; }
+    main { max-width: 32rem; margin: auto; padding: 2rem; background: white; border-radius: 1rem; box-shadow: 0 8px 30px #17323c12; }
+    h1 { margin-top: 0; }
+    label { display: block; margin: 1rem 0 .35rem; font-weight: 600; }
+    input { box-sizing: border-box; width: 100%; padding: .7rem; border: 1px solid #a7b8bb; border-radius: .4rem; font: inherit; }
+    button { margin-top: 1.4rem; padding: .8rem 1.2rem; border: 0; border-radius: .4rem; color: white; background: #087f74; font: inherit; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    #result { margin-top: 1.5rem; overflow-wrap: anywhere; }
+    .error { color: #a12626; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Pedido de bicicleta</h1>
+    <p>Registra el pedido y conserva su identificador para consultar los registros del procesamiento.</p>
+    <form id="order-form">
+      <label for="email">Correo electrónico</label>
+      <input id="email" name="customerEmail" type="email" required>
+      <label for="model">Modelo de bicicleta</label>
+      <input id="model" name="bikeModel" required>
+      <label for="quantity">Cantidad</label>
+      <input id="quantity" name="quantity" type="number" min="1" step="1" value="1" required>
+      <label for="price">Precio unitario</label>
+      <input id="price" name="unitPrice" type="number" min="0.01" step="0.01" required>
+      <button type="submit">Confirmar pedido</button>
+    </form>
+    <p id="result" role="status" aria-live="polite"></p>
+  </main>
+  <script>
+    const form = document.querySelector('#order-form');
+    const result = document.querySelector('#result');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button');
+      button.disabled = true;
+      result.className = '';
+      result.textContent = 'Registrando pedido…';
+      const data = Object.fromEntries(new FormData(form));
+      data.quantity = Number(data.quantity);
+      data.unitPrice = Number(data.unitPrice);
+      try {
+        const response = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const order = await response.json();
+        result.textContent = `Pedido recibido. Identificador: ${order.pedidoId}`;
+        form.reset();
+      } catch (error) {
+        result.className = 'error';
+        result.textContent = `No se pudo registrar el pedido (${error.message}). Revisa los datos y la conexión.`;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

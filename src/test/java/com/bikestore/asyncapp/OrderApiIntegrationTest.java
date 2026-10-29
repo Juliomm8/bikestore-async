@@ -78,6 +78,16 @@ class OrderApiIntegrationTest {
         assertThat(rabbitTemplate.receive(RabbitTopology.PAYMENT_QUEUE, 1000)).isNull();
     }
 
+    @Test
+    void orderFormIsServed() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/"))
+                .GET().build();
+        HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("Pedido de bicicleta", "order-form", "/api/orders");
+    }
+
     private HttpResponse<String> post(String body) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/orders"))
                 .header("Content-Type", "application/json")
