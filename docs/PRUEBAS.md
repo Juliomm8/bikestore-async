@@ -82,3 +82,20 @@ La revisión manual se hizo en Chromium contra `http://localhost:8080/`, con el 
 | Accesibilidad básica | `Tab` enfocó el enlace de salto con contorno visible; los campos tenían etiquetas, las imágenes cargadas tenían texto alternativo y no hubo IDs duplicados. |
 
 Las capturas y el registro de revisión se guardaron localmente en `target/ui-review/` (directorio ignorado por Git). El verificador de evidencias del flujo de diseño informó `Evidence record complete` tras revisar los dos tamaños, estados y artefactos. Esta comprobación visual fue manual; los mensajes y la respuesta HTTP sí se observaron en el navegador real.
+
+## Rediseño visual (29 de octubre de 2026)
+
+Se ejecutó `mvnw.cmd package -q` con las variables de `.env` cargadas, `RABBITMQ_HOST=127.0.0.1` y las colas vacías: **10 pruebas correctas, 0 fallos**. La prueba `orderFormIsServed` se actualizó a los nuevos nombres de clases CSS (`.card`, `.order__panel`).
+
+Con la aplicación real y Google Chrome controlado por Playwright (escritorio 1440×900 y móvil 390×844):
+
+| Comprobación | Resultado |
+| --- | --- |
+| Carga de portada | Sin errores de consola ni de red (se añadió un favicon para evitar un 404). |
+| Filtro Gravel | Mostró 5 bicicletas. |
+| Selección de `Alerce` y cantidad 2 | Total `$3.120,00`; la barra de selección llevó al pedido. |
+| Envío | Cuerpo `{"customerEmail":"test@example.com","bikeModel":"Alerce","quantity":2,"unitPrice":1560}`; el API respondió 202 y la interfaz mostró el `pedidoId` aclarando que el pago aún no se ha procesado. |
+| Menú móvil | Se abre, muestra los tres enlaces, cambia a «Cerrar» y se cierra con Esc o al elegir un enlace. |
+| Desbordamiento horizontal | No hubo en 390 px en portada, selección, catálogo, pedido y pie. |
+
+No se probó con lectores de pantalla ni en Firefox/Safari. Las animaciones respetan `prefers-reduced-motion` por CSS y JavaScript, pero esa preferencia no se activó en el navegador durante la revisión.
