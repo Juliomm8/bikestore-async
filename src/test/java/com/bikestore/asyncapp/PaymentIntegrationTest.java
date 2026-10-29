@@ -109,6 +109,17 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void fourthAttemptCanPayWithoutEnteringDeadLetterQueue() throws Exception {
+        String id = submit("PASS4");
+        PaymentResult paid = readPaid();
+        assertThat(paid.pedidoId()).isEqualTo(id);
+        assertThat(paid.attempts()).isEqualTo(4);
+        assertThat(decision.count(id)).isEqualTo(4);
+        awaitEmail(id);
+        assertThat(template.receive(RabbitTopology.DEAD_QUEUE, 100)).isNull();
+    }
+
+    @Test
     void fourFailuresReachDeadLetterQueue() throws Exception {
         String id = submit("FAIL4");
         Message message = template.receive(RabbitTopology.DEAD_QUEUE, 10000);
@@ -182,6 +193,7 @@ class PaymentIntegrationTest {
             return switch (order.bikeModel()) {
                 case "PASS1" -> attempt == 1;
                 case "PASS3" -> attempt == 3;
+                case "PASS4" -> attempt == 4;
                 default -> false;
             };
         }
