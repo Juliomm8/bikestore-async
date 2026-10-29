@@ -24,7 +24,8 @@ import com.bikestore.asyncapp.model.OrderMessage;
 
 import tools.jackson.databind.ObjectMapper;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "spring.rabbitmq.listener.simple.auto-startup=false")
 class OrderApiIntegrationTest {
     @LocalServerPort
     int port;
