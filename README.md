@@ -20,14 +20,9 @@ docker compose up -d rabbitmq
 docker compose ps
 ```
 
-Carga las variables en la sesión de PowerShell que ejecutará Java, sin imprimir sus valores:
+Desde una terminal PowerShell abierta en la raíz del proyecto, inicia Spring Boot. La aplicación importa `.env` automáticamente y conecta a RabbitMQ mediante `127.0.0.1:5672`; no necesitas exportar variables en la terminal:
 
 ```powershell
-Get-Content .env | ForEach-Object {
-    if ($_ -match '^([^#=]+)=(.*)$') {
-        [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
-    }
-}
 .\mvnw.cmd spring-boot:run
 ```
 
