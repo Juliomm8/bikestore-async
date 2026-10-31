@@ -126,9 +126,11 @@ class OrderApiIntegrationTest {
         assertThat(stylesheet.body()).contains(".card", ".order__panel");
 
         HttpRequest imageRequest = HttpRequest.newBuilder(
-                URI.create("http://localhost:" + port + "/images/ruta-clara.jpg")).GET().build();
+                URI.create("http://localhost:" + port + "/images/ruta-clara.webp?v=20261031-3")).GET().build();
         HttpResponse<byte[]> image = client.send(imageRequest, HttpResponse.BodyHandlers.ofByteArray());
         assertThat(image.statusCode()).isEqualTo(200);
+        assertThat(image.headers().firstValue("Content-Type").orElse("")).startsWith("image/webp");
+        assertThat(image.headers().firstValue("Cache-Control").orElse("")).contains("immutable");
         assertThat(image.body().length).isGreaterThan(10_000);
     }
 
