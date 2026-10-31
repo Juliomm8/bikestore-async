@@ -1,0 +1,13 @@
+Listing exchanges for vhost bikestore-evaluation-demo ...
+name	type	durable
+	direct	true
+amq.direct	direct	true
+amq.fanout	fanout	true
+amq.headers	headers	true
+amq.match	headers	true
+amq.rabbitmq.trace	topic	true
+amq.topic	topic	true
+bikestore.dead	direct	true
+bikestore.events	direct	true
+bikestore.orders	direct	true
+bikestore.retry	direct	true

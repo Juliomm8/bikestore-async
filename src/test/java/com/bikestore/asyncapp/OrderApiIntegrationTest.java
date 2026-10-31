@@ -7,9 +7,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
@@ -25,7 +27,8 @@ import com.bikestore.asyncapp.model.OrderMessage;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "spring.rabbitmq.listener.simple.auto-startup=false")
+        properties = { "spring.rabbitmq.listener.simple.auto-startup=false",
+                "spring.rabbitmq.virtual-host=" + RabbitDemoVhost.NAME })
 class OrderApiIntegrationTest {
     @LocalServerPort
     int port;
@@ -39,13 +42,17 @@ class OrderApiIntegrationTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @Value("${spring.rabbitmq.virtual-host:/}")
+    String virtualHost;
+
     private final HttpClient client = HttpClient.newHttpClient();
 
     @BeforeEach
     void verifyQueueIsEmptyWithoutDiscardingOrders() {
+        RabbitDemoVhost.require(virtualHost);
         var properties = rabbitAdmin.getQueueProperties(RabbitTopology.PAYMENT_QUEUE);
         assertThat(properties).as("la cola de pagos debe estar vacía antes de la prueba").isNotNull();
-        assertThat(properties.get("QUEUE_MESSAGE_COUNT")).isEqualTo(0);
+        assertThat(properties.get("QUEUE_MESSAGE_COUNT")).isEqualTo(0L);
     }
 
     @Test
@@ -69,6 +76,7 @@ class OrderApiIntegrationTest {
                 "Ruta Clara", 2, new java.math.BigDecimal("1050.00")));
         assertThat(order.total()).isEqualByComparingTo("2100.00");
         assertThat(order.createdAt()).isNotNull();
+        recordMessage("pedido-simple", accepted.pedidoId(), response.statusCode(), message);
     }
 
     @Test
@@ -89,6 +97,7 @@ class OrderApiIntegrationTest {
                 new com.bikestore.asyncapp.model.OrderItem("Ruta Clara", 1, new java.math.BigDecimal("1050.00")));
         assertThat(order.total()).isEqualByComparingTo("4170.00");
         assertThat(rabbitTemplate.receive(RabbitTopology.PAYMENT_QUEUE, 100)).isNull();
+        recordMessage("carrito-multiple", accepted.pedidoId(), response.statusCode(), message);
     }
 
     @Test
@@ -140,5 +149,17 @@ class OrderApiIntegrationTest {
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
                 .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    }
+
+    private void recordMessage(String scenario, String pedidoId, int status, Message message) throws Exception {
+        System.out.println("BIKESTORE_DEMO " + objectMapper.writeValueAsString(Map.of(
+                "tipo", "mensaje-json-rabbitmq",
+                "escenario", scenario,
+                "pedidoId", pedidoId,
+                "httpStatus", status,
+                "messageId", message.getMessageProperties().getMessageId(),
+                "contentType", message.getMessageProperties().getContentType(),
+                "deliveryMode", message.getMessageProperties().getReceivedDeliveryMode().toString(),
+                "payload", objectMapper.readTree(message.getBody()))));
     }
 }

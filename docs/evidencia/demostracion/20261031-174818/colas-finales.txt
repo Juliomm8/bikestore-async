@@ -1,0 +1,7 @@
+Timeout: 60.0 seconds ...
+Listing queues for vhost bikestore-evaluation-demo ...
+name	messages_ready	messages_unacknowledged	consumers
+bikestore.payment.dead	0	0	0
+bikestore.payment	0	0	0
+bikestore.payment.retry	0	0	0
+bikestore.email	0	0	0

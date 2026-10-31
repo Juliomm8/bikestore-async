@@ -1,0 +1,10 @@
+Listing bindings for vhost bikestore-evaluation-demo...
+source_name	destination_name	routing_key
+	bikestore.payment.dead	bikestore.payment.dead
+	bikestore.payment	bikestore.payment
+	bikestore.payment.retry	bikestore.payment.retry
+	bikestore.email	bikestore.email
+bikestore.events	bikestore.email	payment.paid
+bikestore.orders	bikestore.payment	payment.requested
+bikestore.dead	bikestore.payment.dead	payment.failed
+bikestore.retry	bikestore.payment.retry	payment.retry
