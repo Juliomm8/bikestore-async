@@ -5,6 +5,7 @@ import java.time.Instant;
 
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import com.bikestore.asyncapp.config.RabbitTopology;
@@ -18,6 +19,7 @@ import com.rabbitmq.client.Channel;
 import tools.jackson.databind.ObjectMapper;
 
 @Component
+@Profile({"integrated", "payment"})
 public class PaymentWorker {
     private static final int MAX_ATTEMPTS = 4;
 

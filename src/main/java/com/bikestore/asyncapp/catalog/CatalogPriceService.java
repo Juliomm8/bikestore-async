@@ -7,10 +7,12 @@ import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 
 import com.bikestore.asyncapp.api.InvalidOrderException;
 
 @Service
+@Profile({"integrated", "api"})
 public class CatalogPriceService {
     private final Map<String, CatalogPrice> prices;
 

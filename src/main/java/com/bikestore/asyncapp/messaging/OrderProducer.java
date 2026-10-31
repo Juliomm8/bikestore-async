@@ -5,12 +5,14 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 
 import com.bikestore.asyncapp.config.RabbitTopology;
 import com.bikestore.asyncapp.model.OrderItem;
 import com.bikestore.asyncapp.model.OrderMessage;
 
 @Service
+@Profile({"integrated", "api"})
 public class OrderProducer {
     private final ConfirmedPublisher publisher;
     private final OrderEventLogger events;

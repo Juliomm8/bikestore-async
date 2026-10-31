@@ -6,6 +6,7 @@ import java.util.Map;
 import java.math.BigDecimal;
 
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 
 import com.bikestore.asyncapp.catalog.CatalogPrice;
 import com.bikestore.asyncapp.catalog.CatalogPriceService;
@@ -15,6 +16,7 @@ import com.bikestore.asyncapp.model.OrderItemRequest;
 import com.bikestore.asyncapp.model.OrderRequest;
 
 @Service
+@Profile({"integrated", "api"})
 public class OrderSubmissionService {
     private static final int MAX_QUANTITY_PER_MODEL = 99;
 

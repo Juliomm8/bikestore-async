@@ -4,6 +4,7 @@ import java.io.IOException;
 
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import com.bikestore.asyncapp.config.RabbitTopology;
@@ -14,6 +15,7 @@ import com.rabbitmq.client.Channel;
 import tools.jackson.databind.ObjectMapper;
 
 @Component
+@Profile({"integrated", "email"})
 public class EmailWorker {
     private final ObjectMapper mapper;
     private final EmailSender sender;
