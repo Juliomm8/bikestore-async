@@ -2,6 +2,8 @@ package com.bikestore.asyncapp.email;
 
 import org.springframework.stereotype.Component;
 
+import java.util.stream.Collectors;
+
 import com.bikestore.asyncapp.messaging.OrderEventLogger;
 import com.bikestore.asyncapp.model.PaymentResult;
 
@@ -16,6 +18,10 @@ public class SimulatedEmailSender implements EmailSender {
     @Override
     public void sendConfirmation(PaymentResult payment) {
         events.info(payment.pedidoId(), "EMAIL_SENT",
-                "Confirmación simulada para " + payment.customerEmail());
+                "Confirmación simulada para " + payment.customerEmail() + "; bicicletas="
+                        + payment.items().stream()
+                                .map(item -> item.quantity() + " × " + item.bikeModel())
+                                .collect(Collectors.joining(", "))
+                        + "; total=" + payment.total() + " USD");
     }
 }

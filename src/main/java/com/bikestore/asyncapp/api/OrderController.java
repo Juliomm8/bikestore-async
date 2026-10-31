@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.bikestore.asyncapp.messaging.OrderProducer;
 import com.bikestore.asyncapp.model.OrderAccepted;
 import com.bikestore.asyncapp.model.OrderRequest;
 
@@ -15,14 +14,14 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/orders")
 public class OrderController {
-    private final OrderProducer producer;
+    private final OrderSubmissionService submissions;
 
-    public OrderController(OrderProducer producer) {
-        this.producer = producer;
+    public OrderController(OrderSubmissionService submissions) {
+        this.submissions = submissions;
     }
 
     @PostMapping
     public ResponseEntity<OrderAccepted> submit(@Valid @RequestBody OrderRequest request) {
-        return ResponseEntity.accepted().body(new OrderAccepted(producer.submit(request), "ACCEPTED"));
+        return ResponseEntity.accepted().body(new OrderAccepted(submissions.submit(request), "ACCEPTED"));
     }
 }

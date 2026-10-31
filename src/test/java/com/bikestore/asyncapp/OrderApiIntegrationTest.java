@@ -42,14 +42,16 @@ class OrderApiIntegrationTest {
     private final HttpClient client = HttpClient.newHttpClient();
 
     @BeforeEach
-    void clearQueue() {
-        rabbitAdmin.purgeQueue(RabbitTopology.PAYMENT_QUEUE, true);
+    void verifyQueueIsEmptyWithoutDiscardingOrders() {
+        var properties = rabbitAdmin.getQueueProperties(RabbitTopology.PAYMENT_QUEUE);
+        assertThat(properties).as("la cola de pagos debe estar vacía antes de la prueba").isNotNull();
+        assertThat(properties.get("QUEUE_MESSAGE_COUNT")).isEqualTo(0);
     }
 
     @Test
     void validOrderIsAcceptedAndPublishedAsPersistentJson() throws Exception {
         HttpResponse<String> response = post("""
-                {"customerEmail":"ana@example.com","bikeModel":"Montaña X","quantity":2,"unitPrice":450.50}
+                {"customerEmail":"ana@example.com","bikeModel":"Ruta Clara","quantity":2,"unitPrice":0.01}
                 """);
 
         assertThat(response.statusCode()).isEqualTo(202);
@@ -63,9 +65,30 @@ class OrderApiIntegrationTest {
         assertThat(message.getMessageProperties().getReceivedDeliveryMode()).isEqualTo(MessageDeliveryMode.PERSISTENT);
         OrderMessage order = objectMapper.readValue(message.getBody(), OrderMessage.class);
         assertThat(order.pedidoId()).isEqualTo(accepted.pedidoId());
-        assertThat(order.bikeModel()).isEqualTo("Montaña X");
-        assertThat(order.quantity()).isEqualTo(2);
+        assertThat(order.items()).containsExactly(new com.bikestore.asyncapp.model.OrderItem(
+                "Ruta Clara", 2, new java.math.BigDecimal("1050.00")));
+        assertThat(order.total()).isEqualByComparingTo("2100.00");
         assertThat(order.createdAt()).isNotNull();
+    }
+
+    @Test
+    void cartIsPublishedAsOneMessageWithServerPrices() throws Exception {
+        HttpResponse<String> response = post("""
+                {"customerEmail":"ana@example.com","items":[{"bikeModel":"Alerce","quantity":2},{"bikeModel":"Ruta Clara","quantity":1}],"unitPrice":0.01}
+                """);
+
+        assertThat(response.statusCode()).isEqualTo(202);
+        OrderAccepted accepted = objectMapper.readValue(response.body(), OrderAccepted.class);
+        Message message = rabbitTemplate.receive(RabbitTopology.PAYMENT_QUEUE, 5000);
+        assertThat(message).isNotNull();
+        assertThat(message.getMessageProperties().getReceivedDeliveryMode()).isEqualTo(MessageDeliveryMode.PERSISTENT);
+        OrderMessage order = objectMapper.readValue(message.getBody(), OrderMessage.class);
+        assertThat(order.pedidoId()).isEqualTo(accepted.pedidoId());
+        assertThat(order.items()).containsExactly(
+                new com.bikestore.asyncapp.model.OrderItem("Alerce", 2, new java.math.BigDecimal("1560.00")),
+                new com.bikestore.asyncapp.model.OrderItem("Ruta Clara", 1, new java.math.BigDecimal("1050.00")));
+        assertThat(order.total()).isEqualByComparingTo("4170.00");
+        assertThat(rabbitTemplate.receive(RabbitTopology.PAYMENT_QUEUE, 100)).isNull();
     }
 
     @Test
@@ -93,7 +116,7 @@ class OrderApiIntegrationTest {
         HttpResponse<String> script = client.send(scriptRequest,
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         assertThat(script.statusCode()).isEqualTo(200);
-        assertThat(script.body()).contains("/api/orders", "customerEmail", "bikeModel", "unitPrice");
+        assertThat(script.body()).contains("/api/orders", "customerEmail", "items");
 
         HttpRequest stylesheetRequest = HttpRequest.newBuilder(
                 URI.create("http://localhost:" + port + "/css/store.css")).GET().build();

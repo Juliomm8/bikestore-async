@@ -84,7 +84,7 @@ public class PaymentWorker {
 
     private void onPaid(OrderMessage order, int attempt) {
         PaymentResult result = new PaymentResult(order.pedidoId(), order.customerEmail(),
-                order.bikeModel(), "PAID", attempt, Instant.now());
+                order.items(), order.total(), "PAID", attempt, Instant.now());
         publisher.publish(RabbitTopology.EVENT_EXCHANGE, RabbitTopology.PAID_KEY,
                 order.pedidoId(), result, null);
         events.info(order.pedidoId(), "PAYMENT_PAID", "Cobro simulado exitoso en intento " + attempt);

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -31,6 +32,7 @@ import com.bikestore.asyncapp.email.EmailSender;
 import com.bikestore.asyncapp.messaging.ConfirmedPublisher;
 import com.bikestore.asyncapp.messaging.OrderEventLogger;
 import com.bikestore.asyncapp.model.FailedPayment;
+import com.bikestore.asyncapp.model.OrderItem;
 import com.bikestore.asyncapp.model.OrderMessage;
 import com.bikestore.asyncapp.model.PaymentResult;
 import com.bikestore.asyncapp.payment.PaymentDecision;
@@ -138,8 +140,9 @@ class PaymentIntegrationTest {
     @Test
     void emailIgnoresPendingPayment() throws Exception {
         String id = UUID.randomUUID().toString();
-        PaymentResult pending = new PaymentResult(id, "test@example.com", "PENDING",
-                "PENDING", 1, Instant.now());
+        PaymentResult pending = new PaymentResult(id, "test@example.com",
+                List.of(new OrderItem("Ruta Clara", 1, new BigDecimal("1050.00"))),
+                new BigDecimal("1050.00"), "PENDING", 1, Instant.now());
         publisher.publish(RabbitTopology.EVENT_EXCHANGE, RabbitTopology.PAID_KEY,
                 id, pending, null);
         assertThat(template.receive(auditQueue, 5000)).isNotNull();
@@ -149,8 +152,9 @@ class PaymentIntegrationTest {
 
     private String submit(String model) {
         String id = UUID.randomUUID().toString();
-        OrderMessage order = new OrderMessage(id, "test@example.com", model,
-                1, new BigDecimal("100.00"), Instant.now());
+        OrderMessage order = new OrderMessage(id, "test@example.com",
+                List.of(new OrderItem(model, 1, new BigDecimal("100.00"))),
+                new BigDecimal("100.00"), Instant.now());
         publisher.publish(RabbitTopology.ORDER_EXCHANGE, RabbitTopology.PAYMENT_KEY, id, order, null);
         return id;
     }
@@ -190,7 +194,7 @@ class PaymentIntegrationTest {
         @Override
         public boolean approved(OrderMessage order, int attempt) {
             calls.computeIfAbsent(order.pedidoId(), ignored -> new AtomicInteger()).incrementAndGet();
-            return switch (order.bikeModel()) {
+                return switch (order.items().get(0).bikeModel()) {
                 case "PASS1" -> attempt == 1;
                 case "PASS3" -> attempt == 3;
                 case "PASS4" -> attempt == 4;
