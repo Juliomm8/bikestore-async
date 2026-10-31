@@ -122,15 +122,13 @@ Las pruebas unitarias deterministas cubren el contrato REST, el precio autoritat
 .\mvnw.cmd -q -DskipTests package
 ```
 
-Las pruebas de integración adicionales usan RabbitMQ real y algunas vacían las colas de BikeStore. Ejecútalas únicamente con la aplicación detenida, las colas sin pedidos pendientes y sin otros consumidores activos:
+Para demostrar el flujo completo con RabbitMQ real sin tocar el vhost principal, usa el runner aislado:
 
 ```powershell
-.\mvnw.cmd test
-.\mvnw.cmd package
-docker exec bikestore-rabbitmq rabbitmqctl list_queues name messages arguments
+.\scripts\Run-RabbitMqDemostracion.ps1
 ```
 
-Las pruebas sustituyen la decisión aleatoria por resultados deterministas. `PaymentIntegrationTest` crea temporalmente una cola de auditoría para comprobar los eventos `PAID` y limpia las colas de BikeStore al preparar cada escenario. Consulta [docs/PRUEBAS.md](docs/PRUEBAS.md) para distinguir los escenarios ejecutados de los que se dejaron sin ejecutar por seguridad del broker.
+El runner verifica que las colas del vhost `bikestore-evaluation-demo` no tengan mensajes ni consumidores, y fija ese vhost en las pruebas que preparan escenarios de pago. No purga colas del vhost principal. Consulta [docs/DEMOSTRACION.md](docs/DEMOSTRACION.md) para el diagrama, resultados, capturas textuales, límites actuales y guion de exposición; los resultados de otras ejecuciones están en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ## Recursos estáticos y caché
 

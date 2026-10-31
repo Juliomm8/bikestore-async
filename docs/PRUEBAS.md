@@ -262,3 +262,11 @@ La comprobación del envío real es un resultado observado de esta sesión. Las 
 ![Tienda en escritorio con tema claro](evidencia/tema-claro-escritorio.jpg)
 
 ![Bolsa en móvil con tema oscuro](evidencia/tema-oscuro-movil.jpg)
+
+## Demostración RabbitMQ aislada (31 de octubre de 2026)
+
+Las pruebas `OrderApiIntegrationTest` y `PaymentIntegrationTest` se fijaron al vhost `bikestore-evaluation-demo`; la segunda comprueba ese vhost antes de ejecutar sus purgas. Se agregó `scripts/Run-RabbitMqDemostracion.ps1`, que hace preflight de salud, mensajes, mensajes sin reconocer y consumidores, toma capturas de mensajes/eventos/topología, y aborta si encuentra trabajo activo en el vhost de prueba.
+
+La ejecución final del runner pasó **9 pruebas** con RabbitMQ real: 4 de API y 5 de pagos/correo. Se observaron dos publicaciones HTTP `202` con JSON persistente, pago inmediato, pago al tercer intento, pago al cuarto intento, cuatro fallos con un `FailedPayment` recibido desde la DLQ y ausencia de confirmación de correo para ese fallo. Los IDs y cuerpos observados, los eventos `pedidoId/timestamp/thread`, bindings y estado final están guardados en [docs/evidencia/demostracion/20261031-174818](evidencia/demostracion/20261031-174818); la guía con ejemplos y límites es [docs/DEMOSTRACION.md](DEMOSTRACION.md).
+
+Al terminar, las colas del vhost aislado tenían cero mensajes y cero consumidores. La cola principal `bikestore.payment.dead` conservó su mensaje pendiente y los consumidores de la instancia activa siguieron conectados; no se ejecutó ninguna purga ni se detuvo ningún contenedor.
