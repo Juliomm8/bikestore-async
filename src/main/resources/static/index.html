@@ -7,7 +7,7 @@
   <meta name="description" content="BikeStore: bicicletas de gravel, ruta, montaña y ciudad. Catálogo ficticio de una demostración académica de pedidos asíncronos.">
   <title>BikeStore — Bicicletas para el camino largo</title>
   <script>
-    window.BIKESTORE_ASSET_VERSION = '20261031-4';
+    window.BIKESTORE_ASSET_VERSION = '20261031-6';
     document.documentElement.classList.add('js');
     try {
       const preference = localStorage.getItem('bikestore.theme');
@@ -18,10 +18,11 @@
     document.querySelector('meta[name="theme-color"]').content = window.BIKESTORE_THEME_PREFERENCE === 'dark' || (window.BIKESTORE_THEME_PREFERENCE === 'system' && systemTheme === 'dark') ? '#171a18' : '#e9e6de';
   </script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%23213a2f%27/%3E%3Ctext x=%2716%27 y=%2724%27 font-size=%2722%27 text-anchor=%27middle%27 fill=%27%23e9e6de%27 font-family=%27serif%27%3EB%3C/text%3E%3C/svg%3E">
-  <link rel="preload" href="/fonts/cormorant-garamond-latin-300-normal.woff2?v=20261031-4" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/store.css?v=20261031-4">
-  <script src="/js/catalog.js?v=20261031-4" defer></script>
-  <script src="/js/store.js?v=20261031-4" defer></script>
+  <link rel="preload" href="/fonts/cormorant-garamond-latin-300-normal.woff2?v=20261031-6" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/store.css?v=20261031-6">
+  <script src="/js/catalog.js?v=20261031-6" defer></script>
+  <script src="/js/cart-storage.js?v=20261031-6" defer></script>
+  <script src="/js/store.js?v=20261031-6" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#catalogo">Ir al catálogo</a>
@@ -38,7 +39,7 @@
         <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 15.2A8.4 8.4 0 0 1 8.8 3.7 8.5 8.5 0 1 0 20.3 15.2Z"/></svg>
         <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
       </button>
-      <button class="icon-button cart-toggle" id="cart-toggle" type="button" aria-label="Abrir carrito, 0 unidades" aria-controls="cart-drawer">
+      <button class="icon-button cart-toggle" id="cart-toggle" type="button" aria-label="Abrir la bolsa, 0 unidades" aria-controls="cart-drawer" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l1 13H4L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg>
         <span class="cart-count" id="cart-count" hidden aria-live="polite">0</span>
       </button>
@@ -47,6 +48,54 @@
       </button>
     </div>
   </header>
+
+  <dialog class="cart-drawer" id="cart-drawer" aria-labelledby="cart-drawer-title" aria-describedby="cart-drawer-description">
+    <div class="cart-drawer__panel">
+      <div class="cart-drawer__header">
+        <div>
+          <p class="eyebrow">Tu selección</p>
+          <h2 id="cart-drawer-title">La bolsa</h2>
+        </div>
+        <button class="icon-button dialog-close" id="cart-drawer-close" type="button" aria-label="Cerrar la bolsa">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <p class="cart-drawer__description" id="cart-drawer-description">Modelos para el camino que viene.</p>
+      <div class="cart-drawer__scroll">
+        <div class="cart-drawer__empty" id="drawer-empty" hidden>
+          <p>La bolsa está vacía por ahora.</p>
+          <a href="#catalogo" id="drawer-explore">Explorar bicicletas <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="cart-items cart-items--drawer" id="drawer-items" aria-label="Productos en la bolsa" aria-live="polite"></div>
+      </div>
+      <div class="cart-drawer__summary">
+        <p class="cart-drawer__units" id="drawer-units">0 unidades</p>
+        <div class="cart-drawer__total"><span>Total del pedido</span><strong id="drawer-total">—</strong></div>
+        <button class="button" id="cart-continue" type="button" disabled>Continuar con el pedido</button>
+        <p>El precio final lo calcula el catálogo del servidor. Sin cargos ni pagos reales.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="product-dialog" id="product-dialog" aria-labelledby="quick-title" aria-describedby="quick-description">
+    <article class="product-dialog__panel">
+      <div class="product-dialog__media" id="quick-media">
+        <img id="quick-image" alt="" width="1200" height="800">
+      </div>
+      <div class="product-dialog__detail">
+        <button class="icon-button dialog-close product-dialog__close" id="quick-close" type="button" aria-label="Cerrar ficha de bicicleta" autofocus>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+        <p class="eyebrow" id="quick-category"></p>
+        <h2 id="quick-title"></h2>
+        <p class="product-dialog__price" id="quick-price"></p>
+        <p id="quick-description"></p>
+        <h3>Detalles</h3>
+        <ul class="product-dialog__specs" id="quick-specs"></ul>
+        <button class="button" id="quick-add" type="button">Añadir a la bolsa</button>
+      </div>
+    </article>
+  </dialog>
 
   <main>
     <section class="hero" id="inicio" aria-labelledby="hero-title">
