@@ -1,8 +1,8 @@
-@font-face { font-family: "Cormorant Garamond"; font-weight: 300; font-style: normal; font-display: swap; src: url("/fonts/cormorant-garamond-latin-300-normal.woff2?v=20261031-6") format("woff2"); }
-@font-face { font-family: "Cormorant Garamond"; font-weight: 300; font-style: italic; font-display: swap; src: url("/fonts/cormorant-garamond-latin-300-italic.woff2?v=20261031-6") format("woff2"); }
-@font-face { font-family: "Cormorant Garamond"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/cormorant-garamond-latin-500-normal.woff2?v=20261031-6") format("woff2"); }
-@font-face { font-family: "Hanken Grotesk"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/hanken-grotesk-latin-400-normal.woff2?v=20261031-6") format("woff2"); }
-@font-face { font-family: "Hanken Grotesk"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/hanken-grotesk-latin-500-normal.woff2?v=20261031-6") format("woff2"); }
+@font-face { font-family: "Cormorant Garamond"; font-weight: 300; font-style: normal; font-display: swap; src: url("/fonts/cormorant-garamond-latin-300-normal.woff2?v=20261031-7") format("woff2"); }
+@font-face { font-family: "Cormorant Garamond"; font-weight: 300; font-style: italic; font-display: swap; src: url("/fonts/cormorant-garamond-latin-300-italic.woff2?v=20261031-7") format("woff2"); }
+@font-face { font-family: "Cormorant Garamond"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/cormorant-garamond-latin-500-normal.woff2?v=20261031-7") format("woff2"); }
+@font-face { font-family: "Hanken Grotesk"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/hanken-grotesk-latin-400-normal.woff2?v=20261031-7") format("woff2"); }
+@font-face { font-family: "Hanken Grotesk"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/hanken-grotesk-latin-500-normal.woff2?v=20261031-7") format("woff2"); }
 
 :root {
   --bone: #e9e6de;
@@ -14,8 +14,6 @@
   --green-hover: #2f5242;
   --forest: #213a2f;
   --button-ink: #e9e6de;
-  --pickbar-button-bg: #e9e6de;
-  --pickbar-button-ink: #16181a;
   --focus: #213a2f;
   --ember: #9d4728;
   --error: #8a2a1c;
@@ -38,8 +36,6 @@
   --green-hover: #bad0b8;
   --forest: #2a4436;
   --button-ink: #171d19;
-  --pickbar-button-bg: #eeeae1;
-  --pickbar-button-ink: #171a18;
   --focus: #b7ceb4;
   --ember: #e0936b;
   --error: #ff9f8c;
@@ -309,21 +305,6 @@ code { font-size: .9em; }
 .confirmation p { max-width: 46ch; }
 .confirmation__detail { margin: 1.25rem 0 1.75rem; color: var(--stone); font-size: .95rem; }
 
-/* ---------- Barra de selección ---------- */
-.pickbar {
-  position: fixed; left: var(--gutter); right: var(--gutter); bottom: 1rem; z-index: 40; max-width: 40rem; margin-left: auto;
-  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-  background: var(--forest); color: #fff; padding: .75rem .75rem .75rem 1.25rem;
-  transition: transform .5s var(--ease), opacity .4s;
-  animation: fade .5s var(--ease) both;
-}
-.pickbar[hidden] { display: none; }
-.pickbar.is-away { transform: translateY(150%); opacity: 0; pointer-events: none; }
-.pickbar p span:first-child { font: 500 1.3rem/1 var(--serif); margin-right: .6rem; }
-.pickbar .button { background: var(--pickbar-button-bg); color: var(--pickbar-button-ink); white-space: nowrap; }
-.pickbar .button:hover { background: #fff !important; }
-.pickbar :focus-visible { outline-color: #fff; }
-
 /* ---------- Pie ---------- */
 .site-footer { padding: clamp(3rem, 6vw, 5rem) var(--gutter); display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; align-items: start; }
 .site-footer .wordmark { font-size: 2rem; }
@@ -384,11 +365,6 @@ code { font-size: .9em; }
   .product-dialog__detail h3 { margin-top: 1rem; }
   .product-dialog__specs { gap: .3rem; margin-bottom: 1rem; }
   .product-dialog__detail .button { width: 100%; min-width: 0; min-height: 3.1rem; }
-  .pickbar { left: .75rem; right: .75rem; bottom: .75rem; gap: .5rem; padding: .6rem .6rem .6rem .8rem; }
-  .pickbar p { flex: 1; min-width: 0; }
-  .pickbar p span:first-child { display: block; font-size: 1.1rem; line-height: 1.1; margin: 0 0 .15rem; }
-  .pickbar p span:last-child { display: block; font-size: .8rem; opacity: .8; }
-  .pickbar .button { max-width: 9.5rem; white-space: normal; text-align: center; font-size: .82rem; line-height: 1.15; padding: .65rem .75rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

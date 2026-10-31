@@ -50,7 +50,6 @@ const productDialog = $('#product-dialog');
 const quickImage = $('#quick-image');
 const quickAdd = $('#quick-add');
 const cartStorageKey = 'bikestore.cart.v1';
-const pickbar = $('#pickbar');
 const cart = new Map();
 let selected = null;
 let activeFilter = 'todas';
@@ -264,10 +263,6 @@ function updateCartTotals(sourceInput = null) {
   }
   $('#drawer-units').textContent = `${unitCount} ${unitCount === 1 ? 'unidad' : 'unidades'} · ${cart.size} ${cart.size === 1 ? 'modelo' : 'modelos'}`;
 
-  if (cart.size) {
-    $('#pickbar-name').textContent = `${cart.size} ${cart.size === 1 ? 'modelo' : 'modelos'} · ${unitCount} ${unitCount === 1 ? 'bicicleta' : 'bicicletas'}`;
-    $('#pickbar-price').textContent = valid ? money.format(subtotal) : 'Revisa las cantidades';
-  }
   return valid;
 }
 
@@ -323,7 +318,6 @@ function renderCart(announcement = '') {
   const hasItems = entries.length > 0;
   $('#cart-empty').hidden = hasItems;
   $('#drawer-empty').hidden = hasItems;
-  pickbar.hidden = !hasItems;
   updateOrderPreview(selected && cart.has(selected.id) ? selected : entries.at(-1)?.product);
   if (announcement) $('#cart-status').textContent = announcement;
   updateCartTotals();
@@ -563,10 +557,6 @@ const hero = $('#inicio');
 new IntersectionObserver(([entry]) => {
   header.classList.toggle('is-solid', !entry.isIntersecting);
 }, { rootMargin: '-72px 0px 0px 0px' }).observe(hero);
-
-new IntersectionObserver(([entry]) => {
-  pickbar.classList.toggle('is-away', entry.isIntersecting);
-}, { threshold: 0.25 }).observe($('#pedido'));
 
 const revealItems = document.querySelectorAll('[data-reveal]');
 if (reduceMotion || !('IntersectionObserver' in window)) {
