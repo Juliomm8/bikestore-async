@@ -1,6 +1,7 @@
 const money = new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' });
 const categoryNames = { gravel: 'Gravel', ruta: 'Ruta', 'montaña': 'Montaña', urbana: 'Ciudad' };
-const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+let reduceMotion = motionPreference.matches;
 const themeToggle = document.querySelector('#theme-toggle');
 const colorSchemePreference = window.matchMedia('(prefers-color-scheme: dark)');
 const assetVersion = window.BIKESTORE_ASSET_VERSION;
@@ -43,6 +44,7 @@ const orderTitle = $('#order-title');
 const cartItems = $('#cart-items');
 const drawerItems = $('#drawer-items');
 const cartDialog = $('#cart-drawer');
+const drawerPanel = cartDialog.querySelector('.cart-drawer__panel');
 const cartToggle = $('#cart-toggle');
 const cartCount = $('#cart-count');
 const drawerContinue = $('#cart-continue');
@@ -51,6 +53,8 @@ const quickImage = $('#quick-image');
 const quickAdd = $('#quick-add');
 const cartStorageKey = 'bikestore.cart.v1';
 const cart = new Map();
+let drawerClosePending = false;
+let focusOrderAfterDrawerClose = false;
 let selected = null;
 let activeFilter = 'todas';
 let sending = false;
@@ -297,16 +301,20 @@ function cartItemRow({ product, quantity }, surface) {
   row.dataset.id = product.id;
   row.innerHTML = `
     ${inDrawer ? `<img class="cart-item__thumb" src="${versionedAsset(product.image)}" alt="" style="--cart-image-background:${product.imageBackground}">` : ''}
-    <div class="cart-item__info">
-      <h3>${product.name}</h3>
-      <p>${money.format(product.price)} por unidad</p>
-      <strong data-line-total>${money.format(product.price * quantity)}</strong>
+    <div class="cart-item__main">
+      <div class="cart-item__info">
+        <h3>${product.name}</h3>
+        <p>${money.format(product.price)} por unidad</p>
+        <strong data-line-total>${money.format(product.price * quantity)}</strong>
+      </div>
+      <button class="cart-item__remove" type="button" data-remove="${product.id}" aria-label="Quitar ${product.name} del carrito">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+      </button>
     </div>
     <div class="cart-item__controls">
       <label for="${quantityId}">Cantidad</label>
       <input id="${quantityId}" type="number" min="1" max="99" step="1" inputmode="numeric" value="${quantity}" data-cart-quantity="${product.id}" aria-label="Cantidad de ${product.name}">
-    </div>
-    <button class="cart-item__remove" type="button" data-remove="${product.id}" aria-label="Quitar ${product.name} del carrito">Quitar</button>`;
+    </div>`;
   return row;
 }
 
@@ -526,7 +534,10 @@ document.addEventListener('keydown', event => {
 
 let drawerReturnFocus = cartToggle;
 function openCartDrawer() {
+  if (cartDialog.open) return;
   setMenu(false);
+  drawerClosePending = false;
+  cartDialog.classList.remove('is-closing');
   drawerReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : cartToggle;
   cartDialog.showModal();
   cartToggle.setAttribute('aria-expanded', 'true');
@@ -534,23 +545,54 @@ function openCartDrawer() {
   requestAnimationFrame(() => $('#cart-drawer-close').focus({ preventScroll: true }));
 }
 
-function closeCartDrawer() {
-  if (cartDialog.open) cartDialog.close();
+function finishCartDrawerClose() {
+  if (!drawerClosePending || !cartDialog.open) return;
+  drawerClosePending = false;
+  cartDialog.classList.remove('is-closing');
+  cartDialog.close();
 }
+
+drawerPanel.addEventListener('transitionend', event => {
+  if (event.target === drawerPanel && event.propertyName === 'transform') finishCartDrawerClose();
+});
+
+function closeCartDrawer() {
+  if (!cartDialog.open || drawerClosePending) return;
+  if (reduceMotion) {
+    cartDialog.close();
+    return;
+  }
+  drawerClosePending = true;
+  cartDialog.classList.add('is-closing');
+}
+
+motionPreference.addEventListener('change', event => {
+  reduceMotion = event.matches;
+  if (reduceMotion) finishCartDrawerClose();
+});
 
 cartToggle.addEventListener('click', openCartDrawer);
 $('#cart-drawer-close').addEventListener('click', closeCartDrawer);
 cartDialog.addEventListener('click', event => { if (event.target === cartDialog) closeCartDrawer(); });
+cartDialog.addEventListener('cancel', event => {
+  event.preventDefault();
+  closeCartDrawer();
+});
 cartDialog.addEventListener('close', () => {
   syncDialogBodyLock();
   cartToggle.setAttribute('aria-expanded', 'false');
-  if (drawerReturnFocus?.isConnected) drawerReturnFocus.focus({ preventScroll: true });
+  if (focusOrderAfterDrawerClose) {
+    focusOrderAfterDrawerClose = false;
+    window.location.hash = 'pedido';
+    email.focus({ preventScroll: true });
+  } else if (drawerReturnFocus?.isConnected) {
+    drawerReturnFocus.focus({ preventScroll: true });
+  }
 });
 $('#drawer-explore').addEventListener('click', closeCartDrawer);
 drawerContinue.addEventListener('click', () => {
+  focusOrderAfterDrawerClose = true;
   closeCartDrawer();
-  window.location.hash = 'pedido';
-  window.setTimeout(() => email.focus({ preventScroll: true }), 0);
 });
 
 const hero = $('#inicio');
