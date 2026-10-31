@@ -1,8 +1,34 @@
 const money = new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' });
 const categoryNames = { gravel: 'Gravel', ruta: 'Ruta', 'montaña': 'Montaña', urbana: 'Ciudad' };
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const themeToggle = document.querySelector('#theme-toggle');
+const colorSchemePreference = window.matchMedia('(prefers-color-scheme: dark)');
 const assetVersion = window.BIKESTORE_ASSET_VERSION;
 const versionedAsset = path => `${path}?v=${encodeURIComponent(assetVersion)}`;
+
+function syncThemeControl() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  themeToggle.setAttribute('aria-pressed', String(dark));
+  const label = `Cambiar a modo ${dark ? 'claro' : 'oscuro'}`;
+  themeToggle.setAttribute('aria-label', label);
+  themeToggle.title = label;
+  document.querySelector('meta[name="theme-color"]').content = dark ? '#171a18' : '#e9e6de';
+}
+
+themeToggle.addEventListener('click', () => {
+  const nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = nextTheme;
+  window.BIKESTORE_THEME_PREFERENCE = nextTheme;
+  try { localStorage.setItem('bikestore.theme', nextTheme); } catch { /* La preferencia sigue activa mientras esta página permanezca abierta. */ }
+  syncThemeControl();
+});
+
+colorSchemePreference.addEventListener('change', event => {
+  if (window.BIKESTORE_THEME_PREFERENCE !== 'system') return;
+  document.documentElement.dataset.theme = event.matches ? 'dark' : 'light';
+  syncThemeControl();
+});
+syncThemeControl();
 
 const $ = selector => document.querySelector(selector);
 const grid = $('#product-grid');
