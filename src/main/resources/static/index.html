@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#e9e6de">
   <meta name="description" content="BikeStore: bicicletas de gravel, ruta, montaña y ciudad. Catálogo ficticio de una demostración académica de pedidos asíncronos.">
   <title>BikeStore — Bicicletas para el camino largo</title>
-  <script>document.documentElement.classList.add('js')</script>
+  <script>window.BIKESTORE_ASSET_VERSION = '20261031-2'; document.documentElement.classList.add('js')</script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%23213a2f%27/%3E%3Ctext x=%2716%27 y=%2724%27 font-size=%2722%27 text-anchor=%27middle%27 fill=%27%23e9e6de%27 font-family=%27serif%27%3EB%3C/text%3E%3C/svg%3E">
-  <link rel="preload" href="/fonts/cormorant-garamond-latin-300-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/css/store.css">
-  <script src="/js/catalog.js" defer></script>
-  <script src="/js/store.js" defer></script>
+  <link rel="preload" href="/fonts/cormorant-garamond-latin-300-normal.woff2?v=20261031-2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/store.css?v=20261031-2">
+  <script src="/js/catalog.js?v=20261031-2" defer></script>
+  <script src="/js/store.js?v=20261031-2" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#catalogo">Ir al catálogo</a>
@@ -56,7 +56,7 @@
           <h3>Hierro</h3>
           <p>Cuadro de titanio sin pintura. Con el uso se opaca, se raya y se vuelve más suya. Pensada para cargar poco y pedalear mucho.</p>
           <p class="feature__price" data-price="hierro"></p>
-          <button class="link-button" type="button" data-choose="hierro">Elegir Hierro</button>
+          <button class="link-button" type="button" data-choose="hierro">Añadir Hierro al carrito</button>
         </div>
       </article>
 
@@ -69,7 +69,7 @@
             <h3>Alerce</h3>
             <p>Verde profundo, sillín de cuero y neumáticos anchos para el camino que se acaba de repente.</p>
             <p class="feature__price" data-price="alerce"></p>
-            <button class="link-button" type="button" data-choose="alerce">Elegir Alerce</button>
+            <button class="link-button" type="button" data-choose="alerce">Añadir Alerce al carrito</button>
           </div>
         </article>
         <article class="feature feature--small feature--offset" data-reveal>
@@ -80,7 +80,7 @@
             <h3>Ciudad Verde</h3>
             <p>Posición erguida y guardabarros de serie. Para el café de la esquina y el regreso por la calle bonita.</p>
             <p class="feature__price" data-price="ciudad-verde"></p>
-            <button class="link-button" type="button" data-choose="ciudad-verde">Elegir Ciudad Verde</button>
+            <button class="link-button" type="button" data-choose="ciudad-verde">Añadir Ciudad Verde al carrito</button>
           </div>
         </article>
       </div>
@@ -107,37 +107,33 @@
     <section class="order" id="pedido" aria-labelledby="order-title">
       <figure class="order__figure" id="order-figure">
         <div class="order__placeholder" id="order-placeholder">
-          <p>Aquí aparecerá la bicicleta que elijas.</p>
+          <p>Tu selección aparecerá aquí al añadir la primera bicicleta.</p>
           <a class="link-button" href="#catalogo">Volver al catálogo</a>
         </div>
         <img id="order-image" alt="" hidden width="1600" height="1200">
       </figure>
 
       <div class="order__panel">
-        <h2 id="order-title" tabindex="-1">Tu pedido</h2>
+        <h2 id="order-title" tabindex="-1">Tu carrito</h2>
 
         <div id="order-flow">
-          <dl class="summary" id="summary" aria-live="polite">
-            <div><dt>Modelo</dt><dd id="sum-model">Sin elegir</dd></div>
-            <div><dt>Precio por unidad</dt><dd id="sum-price">—</dd></div>
-          </dl>
+          <p class="cart-intro">Combina modelos, ajusta las cantidades y confirma todo en un solo pedido.</p>
+          <div class="cart-empty" id="cart-empty">Todavía no hay bicicletas. Añade un modelo desde el catálogo.</div>
+          <div class="cart-items" id="cart-items" aria-label="Artículos del carrito" aria-live="polite"></div>
+          <p class="sr-only" id="cart-status" role="status" aria-live="polite"></p>
+          <div class="total" aria-live="polite">
+            <span>Total del pedido</span>
+            <strong id="total">—</strong>
+          </div>
 
           <form id="order-form" novalidate>
             <div class="field">
-              <label for="quantity">Cantidad</label>
-              <input id="quantity" name="quantity" type="number" min="1" step="1" inputmode="numeric" value="1" required disabled>
-            </div>
-            <div class="field">
               <label for="email">Correo electrónico</label>
-              <input id="email" name="customerEmail" type="email" autocomplete="email" placeholder="nombre@correo.com" required disabled>
-            </div>
-            <div class="total" aria-live="polite">
-              <span>Total</span>
-              <strong id="total">—</strong>
+              <input id="email" name="customerEmail" type="email" autocomplete="email" placeholder="nombre@correo.com" required>
             </div>
             <button class="button" id="submit-button" type="submit" disabled>Confirmar pedido</button>
             <p class="form-feedback" id="form-feedback" role="status" aria-live="polite"></p>
-            <p class="form-note">Demostración académica: los precios son ficticios y los envía el navegador, por lo que no deben tomarse como datos comerciales confiables.</p>
+            <p class="form-note">Demostración académica: el servidor calcula el total con los precios ficticios de su catálogo local. No son precios comerciales.</p>
           </form>
         </div>
 
@@ -154,7 +150,7 @@
 
   <div class="pickbar" id="pickbar" hidden>
     <p><span id="pickbar-name"></span> <span id="pickbar-price"></span></p>
-    <a class="button button--small" href="#pedido" id="pickbar-link">Continuar con el pedido</a>
+    <a class="button button--small" href="#pedido" id="pickbar-link">Ver carrito</a>
   </div>
 
   <footer class="site-footer">

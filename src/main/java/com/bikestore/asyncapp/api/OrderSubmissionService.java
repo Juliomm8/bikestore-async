@@ -3,6 +3,7 @@ package com.bikestore.asyncapp.api;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.math.BigDecimal;
 
 import org.springframework.stereotype.Service;
 
@@ -25,7 +26,7 @@ public class OrderSubmissionService {
         this.catalog = catalog;
     }
 
-    public String submit(OrderRequest request) {
+    public OrderSubmissionResult submit(OrderRequest request) {
         List<OrderItemRequest> requestedItems = request.items() != null && !request.items().isEmpty()
                 ? request.items()
                 : List.of(new OrderItemRequest(request.bikeModel(), request.quantity()));
@@ -50,6 +51,9 @@ public class OrderSubmissionService {
         if (items.isEmpty()) {
             throw new InvalidOrderException("El carrito no contiene bicicletas");
         }
-        return producer.submit(request.customerEmail(), items);
+        String pedidoId = producer.submit(request.customerEmail(), items);
+        BigDecimal total = items.stream().map(OrderItem::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new OrderSubmissionResult(pedidoId, total);
     }
 }

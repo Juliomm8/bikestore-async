@@ -7,13 +7,14 @@ const grid = $('#product-grid');
 const count = $('#catalog-count');
 const filters = [...document.querySelectorAll('.filter')];
 const form = $('#order-form');
-const quantity = $('#quantity');
 const email = $('#email');
 const total = $('#total');
 const button = $('#submit-button');
 const feedback = $('#form-feedback');
 const orderTitle = $('#order-title');
+const cartItems = $('#cart-items');
 const pickbar = $('#pickbar');
+const cart = new Map();
 let selected = null;
 let activeFilter = 'todas';
 let sending = false;
@@ -28,7 +29,7 @@ function showFeedback(message, kind = '') {
 /* ---------- Catálogo ---------- */
 
 function cardHtml(product) {
-  const chosen = selected?.id === product.id;
+  const quantity = cart.get(product.id)?.quantity ?? 0;
   return `
     <div class="card__media" style="--image-fit:${product.imageFit};--image-position:${product.imagePosition};--image-scale:${product.imageScale};--image-background:${product.imageBackground}">
       <img src="${product.image}" alt="${product.alt}" loading="lazy" width="${product.imageWidth}" height="${product.imageHeight}">
@@ -41,7 +42,7 @@ function cardHtml(product) {
       <p class="card__category">${categoryNames[product.category]} · ${product.specs[0]}</p>
       <p class="card__desc">${product.description}</p>
       <p class="card__specs">${product.specs.slice(1).join(' · ')}</p>
-      <button type="button" class="link-button${chosen ? ' is-selected' : ''}" data-product="${product.id}" aria-pressed="${chosen}" aria-label="${chosen ? `${product.name}, elegida` : `Elegir ${product.name}`}">${chosen ? 'Elegida' : 'Elegir'}</button>
+      <button type="button" class="link-button${quantity ? ' is-selected' : ''}" data-product="${product.id}" aria-label="${quantity ? `Añadir otra ${product.name} al carrito; cantidad actual ${quantity}` : `Añadir ${product.name} al carrito`}"${quantity >= 99 || sending ? ' disabled' : ''}>${quantity ? `En carrito · ${quantity}` : 'Añadir al carrito'}</button>
     </div>`;
 }
 
@@ -49,12 +50,27 @@ function renderCatalog() {
   const visible = products.filter(product => activeFilter === 'todas' || product.category === activeFilter);
   grid.replaceChildren(...visible.map(product => {
     const article = document.createElement('article');
-    article.className = `card${selected?.id === product.id ? ' is-selected' : ''}`;
+    article.className = `card${cart.has(product.id) ? ' is-selected' : ''}`;
     article.dataset.id = product.id;
     article.innerHTML = cardHtml(product);
     return article;
   }));
   count.textContent = `${visible.length} ${visible.length === 1 ? 'bicicleta' : 'bicicletas'}`;
+}
+
+function updateProductButtons() {
+  grid.querySelectorAll('.card').forEach(card => {
+    const product = findProduct(card.dataset.id);
+    const quantity = cart.get(product.id)?.quantity ?? 0;
+    const add = card.querySelector('button[data-product]');
+    card.classList.toggle('is-selected', quantity > 0);
+    add.classList.toggle('is-selected', quantity > 0);
+    add.textContent = quantity ? `En carrito · ${quantity}` : 'Añadir al carrito';
+    add.setAttribute('aria-label', quantity
+      ? `Añadir otra ${product.name} al carrito; cantidad actual ${quantity}`
+      : `Añadir ${product.name} al carrito`);
+    add.disabled = quantity >= 99 || sending;
+  });
 }
 
 function setFilter(filter) {
@@ -77,83 +93,146 @@ filters.forEach(filter => filter.addEventListener('click', () => setFilter(filte
 
 grid.addEventListener('click', event => {
   const choice = event.target.closest('button[data-product]');
-  if (choice) chooseProduct(findProduct(choice.dataset.product));
+  if (choice) addToCart(findProduct(choice.dataset.product));
 });
 
-/* ---------- Selección y pedido ---------- */
+/* ---------- Carrito y pedido ---------- */
 
-function updateTotal() {
-  const units = Number(quantity.value);
-  const valid = Number.isInteger(units) && units >= 1;
-  quantity.setAttribute('aria-invalid', String(!valid && quantity.value !== ''));
-  total.textContent = selected && valid ? money.format(selected.price * units) : '—';
+function cartTotal() {
+  return [...cart.values()].reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+}
+
+function updateCartTotals() {
+  let valid = cart.size > 0;
+  let subtotal = 0;
+  let unitCount = 0;
+
+  cartItems.querySelectorAll('[data-cart-quantity]').forEach(input => {
+    const product = findProduct(input.dataset.cartQuantity);
+    const quantity = Number(input.value);
+    const lineTotal = input.closest('.cart-item').querySelector('[data-line-total]');
+    const lineValid = Number.isInteger(quantity) && quantity >= 1 && quantity <= 99;
+    input.setAttribute('aria-invalid', String(!lineValid));
+    if (lineValid) {
+      cart.get(product.id).quantity = quantity;
+      const lineAmount = product.price * quantity;
+      lineTotal.textContent = money.format(lineAmount);
+      subtotal += lineAmount;
+      unitCount += quantity;
+    } else {
+      lineTotal.textContent = '—';
+      valid = false;
+    }
+  });
+
+  total.textContent = valid ? money.format(subtotal) : '—';
+  button.disabled = !valid || sending;
+  cartItems.querySelectorAll('input, button').forEach(control => { control.disabled = sending; });
+  if (cart.size) {
+    const modelCount = cart.size;
+    $('#pickbar-name').textContent = `${modelCount} ${modelCount === 1 ? 'modelo' : 'modelos'} · ${unitCount} ${unitCount === 1 ? 'bicicleta' : 'bicicletas'}`;
+    $('#pickbar-price').textContent = valid ? money.format(subtotal) : 'Revisa las cantidades';
+  }
   return valid;
 }
 
-function chooseProduct(product, { scroll = false } = {}) {
-  if (!product) return;
-  const changed = selected?.id !== product.id;
-  selected = product;
-
+function updateOrderPreview(product) {
   const image = $('#order-image');
-  if (changed) {
-    image.hidden = false;
-    $('#order-placeholder').hidden = true;
-    image.classList.remove('is-in');
-    image.src = product.image;
-    image.alt = product.alt;
-    image.style.objectFit = product.imageFit;
-    image.style.objectPosition = product.imagePosition;
-    image.style.setProperty('--image-scale', product.imageScale);
-    $('#order-figure').style.backgroundColor = product.imageBackground;
-    requestAnimationFrame(() => requestAnimationFrame(() => image.classList.add('is-in')));
+  if (!product) {
+    image.hidden = true;
+    image.removeAttribute('data-product-id');
+    $('#order-placeholder').hidden = false;
+    return;
   }
-  $('#sum-model').textContent = `${product.name} · ${categoryNames[product.category]}`;
-  $('#sum-price').textContent = money.format(product.price);
-  quantity.disabled = false;
-  email.disabled = false;
-  button.disabled = false;
-  if (changed) quantity.value = '1';
+  if (image.dataset.productId === product.id) return;
+
+  image.hidden = false;
+  $('#order-placeholder').hidden = true;
+  image.classList.remove('is-in');
+  image.src = product.image;
+  image.alt = product.alt;
+  image.dataset.productId = product.id;
+  image.style.objectFit = product.imageFit;
+  image.style.objectPosition = product.imagePosition;
+  image.style.setProperty('--image-scale', product.imageScale);
+  $('#order-figure').style.backgroundColor = product.imageBackground;
+  requestAnimationFrame(() => requestAnimationFrame(() => image.classList.add('is-in')));
+}
+
+function renderCart(announcement = '') {
+  const entries = [...cart.values()];
+  cartItems.replaceChildren(...entries.map(({ product, quantity }) => {
+    const row = document.createElement('article');
+    row.className = 'cart-item';
+    row.dataset.id = product.id;
+    row.innerHTML = `
+      <div class="cart-item__info">
+        <h3>${product.name}</h3>
+        <p>${money.format(product.price)} por unidad</p>
+        <strong data-line-total>${money.format(product.price * quantity)}</strong>
+      </div>
+      <div class="cart-item__controls">
+        <label for="quantity-${product.id}">Cantidad</label>
+        <input id="quantity-${product.id}" type="number" min="1" max="99" step="1" inputmode="numeric" value="${quantity}" data-cart-quantity="${product.id}" aria-label="Cantidad de ${product.name}">
+      </div>
+      <button class="cart-item__remove" type="button" data-remove="${product.id}" aria-label="Quitar ${product.name} del carrito">Quitar</button>`;
+    return row;
+  }));
+
+  const hasItems = entries.length > 0;
+  $('#cart-empty').hidden = hasItems;
+  pickbar.hidden = !hasItems;
+  updateOrderPreview(selected && cart.has(selected.id) ? selected : entries.at(-1)?.product);
+  if (announcement) $('#cart-status').textContent = announcement;
+  updateCartTotals();
+  updateProductButtons();
+}
+
+function addToCart(product) {
+  if (!product || sending) return;
+  const entry = cart.get(product.id);
+  if (entry && entry.quantity >= 99) {
+    showFeedback('Puedes agregar hasta 99 unidades de cada modelo.', 'error');
+    return;
+  }
+  cart.set(product.id, { product, quantity: (entry?.quantity ?? 0) + 1 });
+  selected = product;
+  renderCart(`${product.name} se agregó al carrito.`);
   showFeedback('');
-  updateTotal();
-  showOrderForm();
+}
 
-  pickbar.hidden = false;
-  $('#pickbar-name').textContent = product.name;
-  $('#pickbar-price').textContent = money.format(product.price);
-
-  // Actualiza solo la ficha afectada para no reiniciar el scroll ni el foco del catálogo.
-  grid.querySelectorAll('.card').forEach(card => {
-    const chosen = card.dataset.id === product.id;
-    card.classList.toggle('is-selected', chosen);
-    const choose = card.querySelector('button[data-product]');
-    choose.classList.toggle('is-selected', chosen);
-    choose.textContent = chosen ? 'Elegida' : 'Elegir';
-    choose.setAttribute('aria-pressed', String(chosen));
-    const name = findProduct(card.dataset.id).name;
-    choose.setAttribute('aria-label', chosen ? `${name}, elegida` : `Elegir ${name}`);
-  });
-
-  if (scroll) {
-    $('#pedido').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
-    orderTitle.focus({ preventScroll: true });
+cartItems.addEventListener('input', event => {
+  const input = event.target.closest('[data-cart-quantity]');
+  if (!input) return;
+  const quantity = Number(input.value);
+  const valid = Number.isInteger(quantity) && quantity >= 1 && quantity <= 99;
+  updateCartTotals();
+  if (valid && feedback.classList.contains('is-error')) showFeedback('');
+  if (!valid) {
+    showFeedback('Cada modelo debe tener una cantidad entera entre 1 y 99.', 'error');
   }
-}
+});
 
-function showOrderForm() {
-  $('#confirmation').hidden = true;
-  $('#order-flow').hidden = false;
-}
+cartItems.addEventListener('click', event => {
+  const remove = event.target.closest('[data-remove]');
+  if (!remove) return;
+  const product = findProduct(remove.dataset.remove);
+  cart.delete(product.id);
+  if (selected?.id === product.id) selected = [...cart.values()].at(-1)?.product ?? null;
+  renderCart(`${product.name} se quitó del carrito.`);
+  showFeedback('');
+  (cartItems.querySelector('[data-remove]') || orderTitle).focus();
+});
 
 document.querySelectorAll('[data-choose]').forEach(control => {
-  control.addEventListener('click', () => chooseProduct(findProduct(control.dataset.choose)));
+  control.addEventListener('click', () => addToCart(findProduct(control.dataset.choose)));
 });
 
 document.querySelectorAll('[data-price]').forEach(node => {
   node.textContent = money.format(findProduct(node.dataset.price).price);
 });
 
-// Un enlace de las piezas destacadas lleva al catálogo y resalta la ficha.
+// Los enlaces de las piezas destacadas llevan a la ficha; no alteran el carrito.
 document.querySelectorAll('[data-pick]').forEach(link => {
   link.addEventListener('click', () => {
     if (activeFilter !== 'todas') setFilter(filters[0]);
@@ -167,10 +246,6 @@ document.querySelectorAll('[data-pick]').forEach(link => {
   });
 });
 
-quantity.addEventListener('input', () => {
-  updateTotal();
-  if (feedback.classList.contains('is-error')) showFeedback('');
-});
 email.addEventListener('input', () => {
   email.removeAttribute('aria-invalid');
   if (feedback.classList.contains('is-error')) showFeedback('');
@@ -179,13 +254,13 @@ email.addEventListener('input', () => {
 form.addEventListener('submit', async event => {
   event.preventDefault();
   if (sending) return;
-  if (!selected) {
-    showFeedback('Elige una bicicleta del catálogo para continuar.', 'error');
+  if (!cart.size) {
+    showFeedback('Añade al menos una bicicleta antes de confirmar el pedido.', 'error');
     return;
   }
-  if (!updateTotal()) {
-    showFeedback('Ingresa una cantidad entera de al menos 1.', 'error');
-    quantity.focus();
+  if (!updateCartTotals()) {
+    showFeedback('Revisa las cantidades del carrito antes de continuar.', 'error');
+    cartItems.querySelector('[aria-invalid="true"]')?.focus();
     return;
   }
   if (!email.validity.valid || !email.value.trim()) {
@@ -195,16 +270,18 @@ form.addEventListener('submit', async event => {
     return;
   }
 
-  // Contrato del API: customerEmail, bikeModel, quantity, unitPrice.
   const payload = {
     customerEmail: email.value.trim(),
-    bikeModel: selected.name,
-    quantity: Number(quantity.value),
-    unitPrice: selected.price
+    items: [...cart.values()].map(item => ({
+      bikeModel: item.product.name,
+      quantity: item.quantity
+    }))
   };
 
   sending = true;
-  button.disabled = true;
+  updateCartTotals();
+  updateProductButtons();
+  email.disabled = true;
   button.classList.add('is-busy');
   button.textContent = 'Enviando pedido';
   showFeedback('Registrando tu pedido…', 'loading');
@@ -215,27 +292,30 @@ form.addEventListener('submit', async event => {
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
-      if (response.status === 400) throw new Error('Revisa el correo y la cantidad antes de intentar de nuevo.');
+      if (response.status === 400) throw new Error('Revisa el correo, los modelos y las cantidades del carrito.');
       throw new Error('El pedido no pudo registrarse. Inténtalo de nuevo en unos momentos.');
     }
     const order = await response.json();
     if (!order.pedidoId) throw new Error('No recibimos un identificador del pedido. Revisa los registros antes de repetirlo.');
-    showConfirmation(order.pedidoId, payload);
+    showConfirmation(order.pedidoId, payload, order.total);
   } catch (error) {
     showFeedback(error instanceof TypeError ? 'No pudimos conectar con la tienda. Comprueba tu conexión e inténtalo otra vez.' : error.message, 'error');
   } finally {
     sending = false;
-    button.disabled = !selected;
+    updateCartTotals();
+    updateProductButtons();
+    email.disabled = false;
     button.classList.remove('is-busy');
     button.textContent = 'Confirmar pedido';
   }
 });
 
-function showConfirmation(id, payload) {
+function showConfirmation(id, payload, serverTotal) {
   const panel = $('#confirmation');
   $('#confirmation-id').textContent = id;
-  $('#confirmation-detail').textContent =
-    `${payload.quantity} × ${payload.bikeModel} · ${money.format(payload.quantity * payload.unitPrice)} · ${payload.customerEmail}`;
+  const items = payload.items.map(item => `${item.quantity} × ${item.bikeModel}`).join(' · ');
+  const displayTotal = serverTotal ?? cartTotal();
+  $('#confirmation-detail').textContent = `${items} · ${money.format(Number(displayTotal))} · ${payload.customerEmail}`;
   showFeedback('');
   $('#order-flow').hidden = true;
   panel.hidden = false;
@@ -245,11 +325,18 @@ function showConfirmation(id, payload) {
   panel.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
 }
 
+function showOrderForm() {
+  $('#confirmation').hidden = true;
+  $('#order-flow').hidden = false;
+}
+
 $('#new-order').addEventListener('click', () => {
   email.value = '';
-  quantity.value = '1';
-  updateTotal();
+  cart.clear();
+  selected = null;
   showOrderForm();
+  renderCart('El carrito está listo para un nuevo pedido.');
+  showFeedback('');
   email.focus();
 });
 
@@ -279,7 +366,6 @@ new IntersectionObserver(([entry]) => {
   header.classList.toggle('is-solid', !entry.isIntersecting);
 }, { rootMargin: '-72px 0px 0px 0px' }).observe(hero);
 
-// La barra de selección se oculta cuando el pedido ya está a la vista.
 new IntersectionObserver(([entry]) => {
   pickbar.classList.toggle('is-away', entry.isIntersecting);
 }, { threshold: 0.25 }).observe($('#pedido'));
@@ -298,3 +384,4 @@ if (reduceMotion || !('IntersectionObserver' in window)) {
 }
 
 renderCatalog();
+renderCart();

@@ -22,6 +22,7 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<OrderAccepted> submit(@Valid @RequestBody OrderRequest request) {
-        return ResponseEntity.accepted().body(new OrderAccepted(submissions.submit(request), "ACCEPTED"));
+        OrderSubmissionResult result = submissions.submit(request);
+        return ResponseEntity.accepted().body(new OrderAccepted(result.pedidoId(), "ACCEPTED", result.total()));
     }
 }

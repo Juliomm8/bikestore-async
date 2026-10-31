@@ -1,4 +1,6 @@
 package com.bikestore.asyncapp.model;
 
-public record OrderAccepted(String pedidoId, String status) {
+import java.math.BigDecimal;
+
+public record OrderAccepted(String pedidoId, String status, BigDecimal total) {
 }
