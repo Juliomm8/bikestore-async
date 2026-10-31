@@ -34,6 +34,14 @@ La página principal es una tienda editorial con doce bicicletas ficticias de gr
 
 Este catálogo es una demostración académica. Los precios ficticios se mantienen en el catálogo inmutable de `CatalogPriceService`; el backend calcula el total y no confía en importes enviados desde el navegador. La pantalla muestra el total estimado con los mismos precios para que el cliente pueda revisar el pedido antes de confirmarlo.
 
+### Tema, bolsa y fichas rápidas
+
+La barra superior incluye el cambio de tema y la bolsa. En la primera visita, el tema sigue `prefers-color-scheme`; el selector se aplica antes de cargar la hoja de estilos, para evitar un destello del tema contrario. La preferencia manual se recuerda en `localStorage` (`bikestore.theme`) y el sistema se sigue mientras no se elija un tema explícito.
+
+La bolsa lateral permite editar cantidades, revisar subtotales, quitar modelos y continuar al formulario. Se conserva en `localStorage` únicamente el identificador del modelo y su cantidad (`bikestore.cart.v1`); al restaurar, los modelos se contrastan con el catálogo actual y los precios se vuelven a leer del servidor. La ficha rápida muestra una fotografía completa, descripción y características sin salir del catálogo. Los diálogos se pueden recorrer con teclado, cierran con `Escape`, contienen el foco y lo devuelven al control que los abrió. Las animaciones respetan `prefers-reduced-motion`.
+
+Vistas verificadas en Chromium: [escritorio, tema claro](docs/evidencia/tema-claro-escritorio.jpg) y [móvil, tema oscuro](docs/evidencia/tema-oscuro-movil.jpg). El detalle de las comprobaciones está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
+
 ## API
 
 `POST /api/orders` recibe JSON con una lista de artículos. Un pedido válido responde `202 Accepted` y un solo `pedidoId`:

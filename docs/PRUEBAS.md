@@ -210,3 +210,55 @@ Comandos finales de auditoría usados en PowerShell:
 npx --yes lighthouse http://127.0.0.1:8082/ --chrome-path="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --chrome-flags="--headless=new --disable-gpu --no-sandbox" --output=json --output-path=target/performance/final-mobile-repeat.json --quiet
 npx --yes lighthouse http://127.0.0.1:8082/ --preset=desktop --chrome-path="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --chrome-flags="--headless=new --disable-gpu --no-sandbox" --output=json --output-path=target/performance/final-desktop.json --quiet
 ```
+
+## Mejora UX/UI: temas, bolsa lateral y ficha rápida (31 de octubre de 2026)
+
+### Pruebas automatizadas
+
+Se ejecutaron después de los cambios:
+
+```powershell
+node --check src/main/resources/static/js/store.js
+node --check src/main/resources/static/js/cart-storage.js
+node --test src/test/javascript/cart-storage.test.cjs
+.\mvnw.cmd -q "-Dtest=OrderControllerMvcTest,OrderControllerTest,OrderSubmissionServiceTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,AssetCacheFilterTest" test
+git diff --check
+.\mvnw.cmd -q -DskipTests package
+```
+
+Los dos `node --check` y `git diff --check` terminaron sin errores. Node ejecutó **4 pruebas: 4 correctas** para lectura, validación, normalización y serialización mínima del carrito. Maven ejecutó el conjunto dirigido: **18 pruebas correctas, 0 fallos, 0 errores y 0 omitidas**. El empaquetado compila la aplicación sin repetir pruebas.
+
+La prueba JavaScript verifica que al restaurar solo se aceptan IDs del catálogo y cantidades enteras válidas; se ignoran campos de precio guardados, se combinan IDs repetidos hasta 99 y una estructura corrupta se descarta sin romper la página. Las pruebas Maven dirigidas usan servicios simulados; no vacían ni alteran colas.
+
+### Revisión en Chromium
+
+Se abrió el sitio estático del proyecto en el navegador Chromium/Edge. La vista de escritorio se capturó a **1440 × 1000** y la móvil a **390 × 844**. También se midieron **360, 390, 768, 1366 y 1920 px**: el ancho del documento coincidió con el viewport; el catálogo utilizó una columna en móvil, dos en tablet y tres en escritorio. Con el drawer abierto, su lista no tuvo desbordamiento interno en esos anchos y las cantidades, importes y botón de continuar permanecieron utilizables.
+
+| Comprobación | Resultado observado |
+| --- | --- |
+| Tema inicial | Chromium siguió la preferencia oscura del sistema; el bootstrap del tema está antes de las hojas de estilos. |
+| Preferencia guardada | Se alternó a claro y luego a oscuro; cada selección siguió activa después de recargar. |
+| Contraste de los tonos secundarios | Ratios WCAG calculados para los tokens sobre el fondo de cada tema: texto secundario/acento 4,60:1 y 5,00:1 en claro; 8,67:1 y 7,14:1 en oscuro. |
+| Carrito al recargar | Alerce × 2 y Ruta Clara × 1 mantuvieron sus líneas y el total `$4.170,00`. Los valores persistidos son IDs y cantidades; el precio vuelve a leerse del catálogo actual. |
+| Edición y eliminación | Cambiar cantidad y retirar una línea actualizó contador, subtotales y total; al quitar el último producto, el drawer mostró «La bolsa está vacía por ahora» y deshabilitó continuar. |
+| Ficha rápida | La foto se mostró completa con categoría, descripción, características y acción para agregar sin salir del catálogo. |
+| Teclado del drawer | `Shift+Tab` desde cierre llegó a «Continuar con el pedido»; `Tab` volvió al primer control; `Escape` cerró y devolvió el foco al botón de bolsa. |
+| Teclado de ficha rápida | El foco quedó contenido; `Shift+Tab` desde cierre llegó a «Añadir a la bolsa» y `Escape` devolvió el foco al control «Ver detalles de Mirador». |
+| Menú móvil | A 390 px se abrió, mostró estado expandido y se cerró con `Escape`, devolviendo el foco a «Menú». |
+| Consola | El navegador no registró errores ni advertencias (`[]`). |
+
+Capturas guardadas en [tema claro, escritorio (1440 × 1000)](evidencia/tema-claro-escritorio.jpg) y [tema oscuro, móvil (390 × 844)](evidencia/tema-oscuro-movil.jpg). Se conservaron también las capturas PNG sin compresión de la revisión en `docs/evidencia/`.
+
+### Pedido real de extremo a extremo y estado de RabbitMQ
+
+Antes de publicar se comprobó con `docker compose ps` que el único servicio de este Compose era `bikestore-rabbitmq`, saludable. El snapshot no destructivo anterior al pedido mostró las colas de BikeStore sin mensajes pendientes, con los consumidores de pago y correo pertenecientes a la instancia que ya estaba activa en 8080. Desde la interfaz se envió **un único** pedido con Alerce × 2 y Ruta Clara × 1; `POST /api/orders` devolvió **HTTP 202**, el total aceptado por servidor fue `$4.170,00` y la respuesta mostró `pedidoId=3e3cd41c-efc8-4f6a-a457-8936759c31eb`. En los registros del productor se observó conexión a `127.0.0.1:5672` y `ORDER_ACCEPTED` con ese ID.
+
+La simulación aleatoria falló en los cuatro intentos y el consumidor dejó ese pedido en `bikestore.payment.dead`. El snapshot no destructivo posterior mostró `bikestore.payment=0`, `bikestore.payment.retry=0`, `bikestore.email=0` y `bikestore.payment.dead=1`; los consumidores existentes de pago y correo seguían conectados. **Ese mensaje de prueba se dejó intacto para análisis: no se purgó, reconoció ni reencoló ninguna cola.** No se detuvo la instancia original de BikeStore ni se modificó otro contenedor.
+
+Por el mensaje pendiente en la DLQ y la instancia activa en 8080, no se ejecutaron `OrderApiIntegrationTest` ni `PaymentIntegrationTest`: sus preparaciones publican en colas compartidas o las vacían. Los escenarios deterministas de éxito, reintentos, DLQ y correo se cubrieron con las pruebas unitarias Maven listadas arriba, sin broker. Las colas se inspeccionaron únicamente con `rabbitmqctl list_queues`.
+
+La comprobación del envío real es un resultado observado de esta sesión. Las decisiones simuladas de pago son aleatorias; el resultado de cuatro fallos describe ese pedido de prueba y no una predicción para pedidos futuros.
+
+![Tienda en escritorio con tema claro](evidencia/tema-claro-escritorio.jpg)
+
+![Bolsa en móvil con tema oscuro](evidencia/tema-oscuro-movil.jpg)
