@@ -1,6 +1,8 @@
 const money = new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' });
 const categoryNames = { gravel: 'Gravel', ruta: 'Ruta', 'montaña': 'Montaña', urbana: 'Ciudad' };
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const assetVersion = window.BIKESTORE_ASSET_VERSION;
+const versionedAsset = path => `${path}?v=${encodeURIComponent(assetVersion)}`;
 
 const $ = selector => document.querySelector(selector);
 const grid = $('#product-grid');
@@ -32,7 +34,7 @@ function cardHtml(product) {
   const quantity = cart.get(product.id)?.quantity ?? 0;
   return `
     <div class="card__media" style="--image-fit:${product.imageFit};--image-position:${product.imagePosition};--image-scale:${product.imageScale};--image-background:${product.imageBackground}">
-      <img src="${product.image}" alt="${product.alt}" loading="lazy" width="${product.imageWidth}" height="${product.imageHeight}">
+      <img src="${versionedAsset(product.image)}" alt="${product.alt}" loading="lazy" width="${product.imageWidth}" height="${product.imageHeight}">
     </div>
     <div class="card__body">
       <div class="card__title">
@@ -149,7 +151,7 @@ function updateOrderPreview(product) {
   image.hidden = false;
   $('#order-placeholder').hidden = true;
   image.classList.remove('is-in');
-  image.src = product.image;
+  image.src = versionedAsset(product.image);
   image.alt = product.alt;
   image.dataset.productId = product.id;
   image.style.objectFit = product.imageFit;
