@@ -30,40 +30,45 @@ Abre [http://localhost:8080/](http://localhost:8080/) para usar el formulario. E
 
 ## Catálogo y formulario
 
-La página principal es una tienda editorial con doce bicicletas ficticias de gravel, ruta, montaña y ciudad (catálogo en `static/js/catalog.js`). Puedes filtrar las categorías, elegir un modelo y ajustar la cantidad; el total se actualiza en pantalla antes de enviar `customerEmail`, `bikeModel`, `quantity` y `unitPrice` a `POST /api/orders`. Tras recibir el `pedidoId`, la página aclara que el pago continúa de forma asíncrona. Las fotografías se sirven desde el proyecto y su procedencia está en [docs/IMAGENES.md](docs/IMAGENES.md).
+La página principal es una tienda editorial con doce bicicletas ficticias de gravel, ruta, montaña y ciudad (catálogo en `static/js/catalog.js`). Puedes filtrar categorías y agregar modelos distintos al carrito, cambiar cantidades o quitar líneas; el subtotal y el total se actualizan automáticamente. Al confirmar, el navegador envía un solo pedido con varios artículos. La página muestra el `pedidoId`, el total aceptado por el servidor y recuerda que el pago continúa de forma asíncrona. Las fotografías WebP se sirven desde el proyecto; su procedencia está en [docs/IMAGENES.md](docs/IMAGENES.md).
 
-Este catálogo es una demostración académica. Sus precios provienen del JavaScript del navegador y el backend no los valida contra un catálogo comercial de confianza.
+Este catálogo es una demostración académica. Los precios ficticios se mantienen en el catálogo inmutable de `CatalogPriceService`; el backend calcula el total y no confía en importes enviados desde el navegador. La pantalla muestra el total estimado con los mismos precios para que el cliente pueda revisar el pedido antes de confirmarlo.
 
 ## API
 
-`POST /api/orders` recibe JSON. Un pedido válido responde `202 Accepted`:
+`POST /api/orders` recibe JSON con una lista de artículos. Un pedido válido responde `202 Accepted` y un solo `pedidoId`:
 
 ```json
 {
   "customerEmail": "ana@example.com",
-  "bikeModel": "Montaña X",
-  "quantity": 2,
-  "unitPrice": 450.50
+  "items": [
+    { "bikeModel": "Alerce", "quantity": 2 },
+    { "bikeModel": "Ruta Clara", "quantity": 1 }
+  ]
 }
 ```
 
 ```json
 {
   "pedidoId": "46513cc1-0b3a-4cbb-a18d-a9f64a5ca7e5",
-  "status": "ACCEPTED"
+  "status": "ACCEPTED",
+  "total": 4170.00
 }
 ```
 
-`customerEmail` debe ser un correo válido, `bikeModel` no puede estar vacío, `quantity` debe ser al menos 1 y `unitPrice` debe ser mayor o igual a 0.01. Los datos inválidos reciben HTTP `400`. `ACCEPTED` significa que RabbitMQ confirmó la publicación, no que el pago haya terminado.
+`customerEmail` debe ser un correo válido; cada `bikeModel` debe existir en el catálogo del servidor y cada `quantity` debe estar entre 1 y 99. La lista acepta hasta 12 líneas y los artículos repetidos se combinan. Los datos inválidos reciben HTTP `400`. `ACCEPTED` significa que RabbitMQ confirmó la publicación, no que el pago haya terminado.
+
+Por compatibilidad, el API también acepta el formato anterior de un artículo (`bikeModel`, `quantity` y `unitPrice`), pero siempre ignora el precio recibido y toma el importe del catálogo del servidor. El formulario actual no envía precios.
 
 Ejemplo desde PowerShell:
 
 ```powershell
 $body = @{
     customerEmail = 'ana@example.com'
-    bikeModel = 'Montaña X'
-    quantity = 2
-    unitPrice = 450.50
+    items = @(
+        @{ bikeModel = 'Alerce'; quantity = 2 },
+        @{ bikeModel = 'Ruta Clara'; quantity = 1 }
+    )
 } | ConvertTo-Json
 Invoke-RestMethod -Uri 'http://localhost:8080/api/orders' -Method Post -ContentType 'application/json' -Body $body
 ```
@@ -87,9 +92,9 @@ flowchart LR
     DeadX --> DLQ[(bikestore.payment.dead)]
 ```
 
-Las colas son duraderas y los mensajes JSON son persistentes. El productor y el trabajador de pagos esperan confirmación de RabbitMQ antes de aceptar o reconocer el mensaje anterior. `PaymentWorker` utiliza una decisión aleatoria de 50 % de éxito por intento en la aplicación normal. Una cabecera `failedAttempts` limita el flujo a un intento inicial y tres reintentos adicionales. La cola de reintento espera 750 ms y usa un dead-letter exchange para devolver el mensaje a pagos. Al cuarto fallo se publica en la DLQ un JSON `FailedPayment` con el pedido completo, cuatro intentos, motivo y fecha. La cola de pagos también tiene un dead-letter exchange para mensajes inválidos rechazados.
+Las colas son duraderas y los mensajes JSON persistentes. El API genera un identificador y publica una sola `OrderMessage` con todos los artículos y el total calculado en el servidor. `PaymentWorker` procesa el carrito completo como una operación y utiliza una decisión aleatoria de 50 % de éxito por intento en la aplicación normal. Una cabecera `failedAttempts` limita el flujo a un intento inicial y tres reintentos adicionales. La cola de reintento espera 750 ms y usa un dead-letter exchange para devolver el mensaje a pagos. Al cuarto fallo se publica en la DLQ un JSON `FailedPayment` con el pedido completo, cuatro intentos, motivo y fecha. La cola de pagos también tiene un dead-letter exchange para mensajes inválidos rechazados.
 
-`EmailWorker` consume una cola diferente, alimentada por el evento `payment.paid`. Comprueba `paymentStatus=PAID` antes de simular el correo. Dos trabajadores en la misma cola competirían por los mensajes, por lo que el correo depende del evento posterior al pago. Las excepciones de publicación pueden producir una nueva entrega; al no existir almacenamiento de idempotencia en esta versión académica, un fallo de confirmación excepcional podría repetir una simulación.
+`EmailWorker` consume una cola diferente, alimentada por el evento `payment.paid`. Comprueba `paymentStatus=PAID` antes de simular el correo e incluye un resumen de modelos, cantidades y total. Dos trabajadores en la misma cola competirían por los mensajes, por lo que el correo depende del evento posterior al pago. Las excepciones de publicación pueden producir una nueva entrega; al no existir almacenamiento de idempotencia en esta versión académica, un fallo de confirmación excepcional podría repetir una simulación.
 
 | Exchange | Routing key | Cola | Uso |
 | --- | --- | --- | --- |
@@ -102,7 +107,14 @@ Los registros de negocio usan siempre `pedidoId`, `timestamp` UTC, `thread`, `ev
 
 ## Pruebas
 
-Con RabbitMQ iniciado y las variables de `.env` cargadas en la sesión:
+Las pruebas unitarias deterministas cubren el contrato REST, el precio autoritativo, el mensaje único del carrito, el pago exitoso, los reintentos, la DLQ y la notificación de correo. Para ejecutarlas sin iniciar una aplicación en el puerto 8080:
+
+```powershell
+.\mvnw.cmd -q "-Dtest=OrderControllerMvcTest,OrderControllerTest,OrderSubmissionServiceTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,AssetCacheFilterTest" test
+.\mvnw.cmd -q -DskipTests package
+```
+
+Las pruebas de integración adicionales usan RabbitMQ real y algunas vacían las colas de BikeStore. Ejecútalas únicamente con la aplicación detenida, las colas sin pedidos pendientes y sin otros consumidores activos:
 
 ```powershell
 .\mvnw.cmd test
@@ -110,8 +122,10 @@ Con RabbitMQ iniciado y las variables de `.env` cargadas en la sesión:
 docker exec bikestore-rabbitmq rabbitmqctl list_queues name messages arguments
 ```
 
-Las pruebas de integración usan el RabbitMQ real y reemplazan la decisión aleatoria por resultados deterministas. También crean temporalmente una cola de auditoría para comprobar los eventos `PAID` sin competir con `EmailWorker`; la eliminan al terminar. Consulta [docs/PRUEBAS.md](docs/PRUEBAS.md) para los escenarios y resultados ejecutados.
+Las pruebas sustituyen la decisión aleatoria por resultados deterministas. `PaymentIntegrationTest` crea temporalmente una cola de auditoría para comprobar los eventos `PAID` y limpia las colas de BikeStore al preparar cada escenario. Consulta [docs/PRUEBAS.md](docs/PRUEBAS.md) para distinguir los escenarios ejecutados de los que se dejaron sin ejecutar por seguridad del broker.
 
-Las pruebas vacían las colas de BikeStore antes de cada escenario; ejecútalas con la aplicación detenida y sin pedidos pendientes.
+## Recursos estáticos y caché
+
+Las fotografías locales se sirven en WebP y las URL de CSS, JavaScript, fuentes e imágenes llevan la versión `BIKESTORE_ASSET_VERSION` definida en `static/index.html`. Cuando se cambie un recurso estático, actualiza esa versión también en las URL de fuentes de `static/css/store.css`. El filtro `AssetCacheFilter` sirve los recursos versionados con un año de caché inmutable; los archivos sin versión deben revalidarse y el HTML no se guarda en caché. Las respuestas de `/api/**` usan `private, no-store` para no conservar pedidos ni operaciones. Las mediciones antes/después están en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 Si existe una cola `bikestore.payment` creada con una versión anterior sin dead-letter exchange, RabbitMQ rechazará cambiar sus argumentos en caliente. Antes de migrarla, inspecciona sus mensajes y procesa o conserva cualquier pedido pendiente; solo cuando esté vacía se puede eliminar esa cola específica para que la aplicación la declare de nuevo.

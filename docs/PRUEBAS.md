@@ -135,3 +135,78 @@ git diff --check
 ```
 
 Los dos `node --check`, `git diff --check`, la prueba unitaria `OrderEventLoggerTest` (1 correcta) y el empaquetado Maven terminaron correctamente. No se ejecutaron en esta revisión `OrderApiIntegrationTest` ni `PaymentIntegrationTest`: hay una instancia de BikeStore activa en el puerto 8080 y las preparaciones de esas pruebas vacían colas RabbitMQ compartidas. La revisión no creó pedidos ni purgó colas. El bloque CSS `prefers-reduced-motion` y la consulta JavaScript `matchMedia` siguen presentes; el control Chromium disponible no ofrece emulación de esa preferencia, por lo que no se afirma que se haya comprobado visualmente con el sistema operativo configurado para movimiento reducido.
+
+## Carrito múltiple, caché y rendimiento (31 de octubre de 2026)
+
+### Pruebas automatizadas
+
+Se ejecutaron desde PowerShell:
+
+```powershell
+.\mvnw.cmd -q "-Dtest=OrderControllerMvcTest,OrderControllerTest,OrderSubmissionServiceTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,AssetCacheFilterTest" test
+.\mvnw.cmd -q -DskipTests package
+node --check src/main/resources/static/js/catalog.js
+node --check src/main/resources/static/js/store.js
+git diff --check
+```
+
+El comando Maven dirigido terminó con **18 pruebas correctas, 0 fallos, 0 errores y 0 omitidas**. El empaquetado también terminó correctamente y compiló las pruebas de integración. Las pruebas dirigidas no conectan a RabbitMQ: comprueban que se acepta el carrito en HTTP `202`, devuelve un único identificador y el total del servidor; las validaciones; los precios autoritativos; una sola publicación por pedido; pagos deterministas con éxito tras reintentos o con cuarto fallo a DLQ; el correo solo para `PAID`; trazabilidad de logs; y los encabezados de caché.
+
+`OrderProducerTest` verifica una sola llamada al publicador y que el mensaje contiene todos los artículos y el total. `PaymentWorkerTest` cubre el éxito posterior a reintentos y la DLQ al cuarto intento, conservando el pedido completo. Estos son resultados automatizados con dependencias simuladas, no una afirmación de que esta versión se haya publicado en RabbitMQ.
+
+### Comprobaciones del navegador
+
+Se revisó la instancia empaquetada en Chromium mediante Playwright, sin enviar un POST de compra. El flujo interactivo observado fue:
+
+| Escenario | Resultado |
+| --- | --- |
+| Añadir Alerce × 2 y Ruta Clara × 1 | Dos modelos en el carrito; total `$4.170,00`. |
+| Cambiar Alerce a 3 | Total recalculado a `$5.730,00`. |
+| Quitar Ruta Clara | Queda Alerce × 3; total `$4.680,00`. |
+| Cantidad 0 | Total pasa a `—` y se deshabilita la confirmación. |
+| Correo inválido | `aria-invalid=true`, mensaje «Ingresa un correo electrónico válido.»; no se envía el formulario. |
+| Filtro Ruta y restablecer | Muestra 3 modelos; «Todas» vuelve a mostrar los 12. |
+| Imágenes y consola | Las 12 imágenes locales de catálogo cargaron como WebP; sin errores ni advertencias de consola. |
+
+Se midió el ancho del documento y el catálogo con el carrito abierto en estos viewports: 360, 390, 768, 1366 y 1920 px. No hubo desbordamiento horizontal; el catálogo mostró una columna en móvil, dos en tablet y tres en escritorio. En todos los anchos siguieron visibles el total, la cantidad y el campo de correo. El menú móvil abrió y cerró con su estado accesible.
+
+### RabbitMQ y límites de esta ejecución
+
+`docker compose ps` mostró `bikestore-rabbitmq` saludable. Antes y después de estas comprobaciones, `rabbitmqctl list_queues name messages consumers` mostró cero mensajes pendientes; la instancia que ya estaba abierta mantenía un consumidor conectado a `bikestore.payment` y otro a `bikestore.email`. No se detuvo esa instancia, no se publicaron pedidos y no se purgaron colas.
+
+Por esa instancia activa no se ejecutó `OrderApiIntegrationTest`, que publica un pedido en la cola compartida, ni `PaymentIntegrationTest`, que purga las colas de pagos, reintentos, correo y DLQ al preparar sus casos. En esta revisión no se verificaron con mensajes reales de RabbitMQ el JSON publicado ni la ubicación real del cuarto fallo en la DLQ. El endpoint se verificó con MockMvc; productores y trabajadores con pruebas deterministas sin broker.
+
+Para comprobar HTTP sin competir por los consumidores se inició temporalmente una instancia en el puerto 8082 con los listeners RabbitMQ desactivados. `GET /` devolvió `200`; los `HEAD` a CSS, JavaScript, WebP y WOFF2 versionados devolvieron `200`. `HEAD /api/orders` devolvió `405` (método no permitido) y conservó `Cache-Control: private, no-store, no-cache, must-revalidate`. No se hizo una petición `POST` al broker activo.
+
+| Recurso | `Cache-Control` observado |
+| --- | --- |
+| HTML de `/` | `no-cache, must-revalidate` |
+| CSS, JavaScript, WebP y WOFF2 con `?v=20261031-3` | `public, max-age=31536000, immutable` |
+| `/api/**` | `private, no-store, no-cache, must-revalidate` |
+
+También se ejecutó `AssetCacheFilterTest`, que comprueba caché de un año solo para archivos versionados, revalidación para recursos sin versión y no almacenamiento de respuestas API. No se guarda en caché el contenido de pedidos ni pagos.
+
+### Optimización de imágenes
+
+Se midieron los 13 archivos de imagen servidos (doce fotos de catálogo y la variante de Mirador para la portada). Las conversiones WebP mantuvieron las dimensiones originales, con calidad individual 82–88. Al compararlas con los originales mediante FFmpeg SSIM, el rango fue **0,9807–0,9891**. El peso conjunto pasó de **4,57 MiB a 3,77 MiB** (**17,5 % menos**). La procedencia, las licencias y las variantes están en [docs/IMAGENES.md](IMAGENES.md).
+
+### Lighthouse
+
+Auditorías locales realizadas el 31 de octubre de 2026 con Lighthouse CLI **13.6.0**, Edge headless y el servidor empaquetado en `127.0.0.1:8082`. La línea base se había medido en el mismo proyecto antes de la conversión WebP y del filtro de caché. Lighthouse dio puntuación de rendimiento 100 en todas las ejecuciones; el peso de transferencia bajó en ambas vistas. Los tiempos móviles variaron entre las dos corridas finales, por eso se muestran ambas.
+
+| Vista | Ejecución | Rendimiento | FCP | LCP | TBT | CLS | Speed Index | Peso transferido |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Móvil | Antes | 100 | 0,9 s | 0,9 s | 0 ms | 0,027 | 0,9 s | 1.486 KiB |
+| Móvil | Después, corrida 1 | 100 | 1,2 s | 1,2 s | 30 ms | 0,027 | 1,2 s | 1.309 KiB |
+| Móvil | Después, corrida 2 | 100 | 0,9 s | 0,9 s | 0 ms | 0,027 | 0,9 s | 1.309 KiB |
+| Escritorio | Antes | 100 | 0,3 s | 0,3 s | 0 ms | 0 | 0,4 s | 2.887 KiB |
+| Escritorio | Después | 100 | 0,2 s | 0,2 s | 0 ms | 0 | 0,4 s | 2.575 KiB |
+
+La transferencia auditada se redujo **177 KiB (11,9 %) en móvil** y **312 KiB (10,8 %) en escritorio**. Los informes JSON de Lighthouse permanecen bajo `target/performance/`, ignorado por Git.
+
+Comandos finales de auditoría usados en PowerShell:
+
+```powershell
+npx --yes lighthouse http://127.0.0.1:8082/ --chrome-path="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --chrome-flags="--headless=new --disable-gpu --no-sandbox" --output=json --output-path=target/performance/final-mobile-repeat.json --quiet
+npx --yes lighthouse http://127.0.0.1:8082/ --preset=desktop --chrome-path="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --chrome-flags="--headless=new --disable-gpu --no-sandbox" --output=json --output-path=target/performance/final-desktop.json --quiet
+```
