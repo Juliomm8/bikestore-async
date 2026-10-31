@@ -1,0 +1,15 @@
+Comprobación real del arranque de desarrollo
+Fecha: 2026-10-31
+Comando: .\mvnw.cmd spring-boot:run
+Overrides temporales: SERVER_PORT=18082; SPRING_RABBITMQ_VIRTUAL_HOST=bikestore-evaluation-demo
+PID de la aplicación observado en consola: 61212
+
+Resultados:
+- Spring Boot indicó que, sin perfil explícito, cargaba el perfil predeterminado "integrated".
+- Tomcat inició en 18082 y GET / respondió HTTP 200.
+- La conexión apuntó a 127.0.0.1:5672 y al vhost bikestore-evaluation-demo.
+- RabbitMQ mostró un consumidor en bikestore.payment y otro en bikestore.email.
+- Después de Ctrl+C, el puerto 18082 quedó libre y ambos conteos de consumidores regresaron a cero.
+- La instancia preexistente en 8080 conservó el PID 54140 durante la comprobación.
+
+La ejecución se detuvo intencionalmente después de verificar el arranque; el código de salida del wrapper refleja la interrupción de Ctrl+C. No se publicó ningún pedido durante esta comprobación.

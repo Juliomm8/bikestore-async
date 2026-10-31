@@ -1,0 +1,35 @@
+INICIO runId=20261031-185451 vhost=bikestore-evaluation-demo apiTestPort=18080
+PROCESO_INICIADO rol=integrated perfiles= pid=55460 hora=2026-10-31T18:54:58.1051496-05:00
+MODO_INTEGRADO_COMPATIBLE defaultProfile=true pid=55460 port=18081 paymentConsumers=1 emailConsumers=1
+PROCESO_DETENIDO rol=integrated pid=55460 hora=2026-10-31T18:55:03.8617141-05:00
+PROCESO_INICIADO rol=api perfiles=api pid=49940 hora=2026-10-31T18:55:05.5767192-05:00
+MODO_VERIFICADO perfil=api pid=49940 HTTP=200 rabbitManagementConnections=0-hasta-publicar paymentConsumers=0 emailConsumers=0
+PROCESO_INICIADO rol=payment perfiles=payment,evaluation pid=44656 hora=2026-10-31T18:55:11.2455523-05:00
+MODO_VERIFICADO perfiles=payment,evaluation pid=44656 rabbitManagementConnections=1 paymentConsumers=1 emailConsumers=0 webListeners=0
+PROCESO_INICIADO rol=email perfiles=email pid=53092 hora=2026-10-31T18:55:18.1885545-05:00
+ESCENARIO_A procesos_independientes=true apiPid=49940 paymentPid=44656 emailPid=53092 rabbitManagementConnections=2-antes-publicacion paymentConsumers=1 emailConsumers=1
+PEDIDO_ACEPTADO http=202 pedidoId=cfe606e0-7a0e-49e6-a586-04399aa44447 correo=demo-normal@example.test respuesta={"pedidoId":"cfe606e0-7a0e-49e6-a586-04399aa44447","status":"ACCEPTED","total":1050.00}
+ESCENARIO_A_VERIFICADO pedidoId=cfe606e0-7a0e-49e6-a586-04399aa44447 pago=PAID correo=EMAIL_SENT rabbitManagementConnections=3
+PROCESO_DETENIDO rol=email pid=53092 hora=2026-10-31T18:55:29.9811145-05:00
+INDEPENDENCIA email_detenido=true api_sigue_activa=true payment_sigue_activo=true rabbitManagementConnections=2 apiPid=49940 paymentPid=44656
+PEDIDO_ACEPTADO http=202 pedidoId=2d14e9e7-f7e5-4a9f-9553-9d2f337566bd correo=demo-email-off@example.test respuesta={"pedidoId":"2d14e9e7-f7e5-4a9f-9553-9d2f337566bd","status":"ACCEPTED","total":1050.00}
+ESCENARIO_B_PENDIENTE pedidoId=2d14e9e7-f7e5-4a9f-9553-9d2f337566bd pago=PAID emailQueueReady=1 rabbitManagementConnections=2 apiPid=49940 paymentPid=44656
+PROCESO_INICIADO rol=email perfiles=email pid=56472 hora=2026-10-31T18:55:34.3042050-05:00
+ESCENARIO_B_VERIFICADO pedidoId=2d14e9e7-f7e5-4a9f-9553-9d2f337566bd mismoPedidoEnPagoYCorreo=true rabbitManagementConnections=3 emailPid=56472
+PROCESO_DETENIDO rol=email pid=56472 hora=2026-10-31T18:55:39.8999074-05:00
+PROCESO_DETENIDO rol=payment pid=44656 hora=2026-10-31T18:55:39.9255067-05:00
+PROCESO_INICIADO rol=email perfiles=email pid=57528 hora=2026-10-31T18:55:41.6510721-05:00
+MODO_VERIFICADO perfil=email pid=57528 rabbitManagementConnections=2 paymentConsumers=0 emailConsumers=1 webListeners=0
+PROCESO_DETENIDO rol=email pid=57528 hora=2026-10-31T18:55:46.3941763-05:00
+PEDIDO_ACEPTADO http=202 pedidoId=083cfb8b-9dbb-46f2-bcbd-302c50365949 correo=demo-payment-off@example.test respuesta={"pedidoId":"083cfb8b-9dbb-46f2-bcbd-302c50365949","status":"ACCEPTED","total":1050.00}
+ESCENARIO_C_PENDIENTE pedidoId=083cfb8b-9dbb-46f2-bcbd-302c50365949 HTTP=202 paymentQueueReady=1 rabbitManagementConnections=1 apiSigueActiva=true apiPid=49940
+PROCESO_INICIADO rol=payment perfiles=payment,evaluation pid=65452 hora=2026-10-31T18:55:52.5342600-05:00
+ESCENARIO_C_VERIFICADO pedidoId=083cfb8b-9dbb-46f2-bcbd-302c50365949 pago=PAID rabbitManagementConnections=2 paymentPid=65452
+PROCESO_INICIADO rol=email perfiles=email pid=45864 hora=2026-10-31T18:56:00.0300597-05:00
+ESCENARIO_C_CORREO pedidoId=083cfb8b-9dbb-46f2-bcbd-302c50365949 EMAIL_SENT=true rabbitManagementConnections=3 emailPid=45864
+PEDIDO_ACEPTADO http=202 pedidoId=a57abbd9-c0ef-4492-981b-5a9dba7022a9 correo=demo-fail-final@example.test respuesta={"pedidoId":"a57abbd9-c0ef-4492-981b-5a9dba7022a9","status":"ACCEPTED","total":1050.00}
+ESCENARIO_D_VERIFICADO pedidoId=a57abbd9-c0ef-4492-981b-5a9dba7022a9 PAYMENT_DEAD_LETTER=true intentos=4 intentosRegistrados=4 emailQueueReady=0 emailSent=false
+PROCESO_DETENIDO rol=email pid=45864 hora=2026-10-31T18:56:17.0221592-05:00
+PROCESO_DETENIDO rol=payment pid=65452 hora=2026-10-31T18:56:17.0467549-05:00
+PROCESO_DETENIDO rol=api pid=49940 hora=2026-10-31T18:56:17.0760425-05:00
+FIN resultado=APROBADO evidencia=C:\Dev\Arquitectura\BikeStore Async\bikestore-async\docs\evidencia\procesos\20261031-185451 vhost=bikestore-evaluation-demo

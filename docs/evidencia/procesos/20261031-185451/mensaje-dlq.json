@@ -1,0 +1,18 @@
+{
+  "order": {
+    "pedidoId": "a57abbd9-c0ef-4492-981b-5a9dba7022a9",
+    "customerEmail": "demo-fail-final@example.test",
+    "items": [
+      {
+        "bikeModel": "Ruta Clara",
+        "quantity": 1,
+        "unitPrice": 1050.0
+      }
+    ],
+    "total": 1050.0,
+    "createdAt": "2026-10-31T23:56:08.422495700Z"
+  },
+  "attempts": 4,
+  "reason": "Cobro simulado rechazado en cuatro intentos",
+  "failedAt": "2026-10-31T23:56:10.703878700Z"
+}
