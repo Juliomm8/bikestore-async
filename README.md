@@ -85,24 +85,73 @@ Invoke-RestMethod -Uri 'http://localhost:8080/api/orders' -Method Post -ContentT
 
 ```mermaid
 flowchart LR
-    Cliente[Cliente o formulario] --> API[POST /api/orders]
-    API --> Productor[OrderProducer]
-    Productor --> Ordenes{{bikestore.orders}}
-    Ordenes --> PagoQ[(bikestore.payment)]
-    PagoQ --> Pago[PaymentWorker]
-    Pago -- fallo, intentos 1 a 3 --> RetryX{{bikestore.retry}}
-    RetryX --> RetryQ[(bikestore.payment.retry)]
-    RetryQ -- TTL 750 ms --> Ordenes
-    Pago -- PAID --> Eventos{{bikestore.events}}
-    Eventos --> EmailQ[(bikestore.email)]
-    EmailQ --> Email[EmailWorker]
-    Pago -- cuarto fallo --> DeadX{{bikestore.dead}}
-    DeadX --> DLQ[(bikestore.payment.dead)]
+    subgraph ApiProcess["Proceso Java · perfil api"]
+        Cliente[Cliente / frontend] --> Controller[POST /api/orders]
+        Controller --> Producer[OrderProducer]
+    end
+
+    subgraph Broker["RabbitMQ · mismo vhost"]
+        OrdersX{{bikestore.orders}}
+        PaymentQ[(bikestore.payment)]
+        RetryX{{bikestore.retry}}
+        RetryQ[(bikestore.payment.retry · TTL 750 ms)]
+        EventsX{{bikestore.events}}
+        EmailQ[(bikestore.email)]
+        DeadX{{bikestore.dead}}
+        Dlq[(bikestore.payment.dead)]
+        OrdersX -->|payment.requested| PaymentQ
+        RetryX -->|payment.retry| RetryQ
+        RetryQ -->|dead-letter · payment.requested| PaymentQ
+        EventsX -->|payment.paid| EmailQ
+        DeadX -->|payment.failed| Dlq
+    end
+
+    subgraph PaymentProcess["Proceso Java · perfil payment"]
+        Payment[PaymentWorker]
+    end
+    subgraph EmailProcess["Proceso Java · perfil email"]
+        Email[EmailWorker]
+    end
+
+    Producer -->|JSON persistente + confirmación| OrdersX
+    PaymentQ --> Payment
+    Payment -->|fallos 1–3| RetryX
+    Payment -->|PAID| EventsX
+    Payment -->|fallo 4| DeadX
+    EmailQ --> Email
 ```
 
-Las colas son duraderas y los mensajes JSON persistentes. El API genera un identificador y publica una sola `OrderMessage` con todos los artículos y el total calculado en el servidor. `PaymentWorker` procesa el carrito completo como una operación y utiliza una decisión aleatoria de 50 % de éxito por intento en la aplicación normal. Una cabecera `failedAttempts` limita el flujo a un intento inicial y tres reintentos adicionales. La cola de reintento espera 750 ms y usa un dead-letter exchange para devolver el mensaje a pagos. Al cuarto fallo se publica en la DLQ un JSON `FailedPayment` con el pedido completo, cuatro intentos, motivo y fecha. La cola de pagos también tiene un dead-letter exchange para mensajes inválidos rechazados.
+El JAR admite cuatro modos excluyentes. Si no se activa un perfil, `spring.profiles.default=integrated` conserva el modo de desarrollo existente: API y ambos consumidores en una JVM. Los perfiles `api`, `payment` y `email` cargan solo el rol indicado; payment y email configuran Spring sin servidor web. Una validación de arranque rechaza combinaciones de perfiles de rol.
 
-`EmailWorker` consume una cola diferente, alimentada por el evento `payment.paid`. Comprueba `paymentStatus=PAID` antes de simular el correo e incluye un resumen de modelos, cantidades y total. Dos trabajadores en la misma cola competirían por los mensajes, por lo que el correo depende del evento posterior al pago. Las excepciones de publicación pueden producir una nueva entrega; al no existir almacenamiento de idempotencia en esta versión académica, un fallo de confirmación excepcional podría repetir una simulación.
+### Ejecutar tres procesos en Windows
+
+Inicia RabbitMQ de BikeStore y compila el JAR una sola vez:
+
+```powershell
+docker compose up -d rabbitmq
+docker compose ps
+.\mvnw.cmd -DskipTests package
+```
+
+Abre tres terminales PowerShell en la raíz del repositorio y ejecuta un comando en cada una:
+
+```powershell
+java -jar target\bikestore-async-0.0.1-SNAPSHOT.jar --spring.profiles.active=api
+```
+
+```powershell
+java -jar target\bikestore-async-0.0.1-SNAPSHOT.jar --spring.profiles.active=payment
+```
+
+```powershell
+java -jar target\bikestore-async-0.0.1-SNAPSHOT.jar --spring.profiles.active=email
+```
+
+El API atiende el puerto `8080`; los dos workers no abren puertos HTTP. Cada terminal inicia su propia JVM. Para detener un rol, pulsa `Ctrl+C` en su terminal. La conexión y las credenciales se leen de `.env`, importado desde la raíz; el perfil de cada terminal cambia únicamente sus componentes.
+
+En RabbitMQ Management (`http://127.0.0.1:15672`), revisa **Connections** para ver las conexiones de los procesos y **Queues** para comprobar un consumidor en `bikestore.payment` y otro en `bikestore.email`. El perfil `api` abre su conexión al publicar el primer pedido; payment y email la abren al conectarse. Usa las credenciales locales de `.env`. Ejecuta el modo integrado o los tres procesos distribuidos en una sesión, no ambos a la vez.
+
+### Exchanges, rutas y colas
 
 | Exchange | Routing key | Cola | Uso |
 | --- | --- | --- | --- |
@@ -111,14 +160,38 @@ Las colas son duraderas y los mensajes JSON persistentes. El API genera un ident
 | `bikestore.events` | `payment.paid` | `bikestore.email` | Confirmaciones después del pago |
 | `bikestore.dead` | `payment.failed` | `bikestore.payment.dead` | Fallos definitivos y mensajes rechazados |
 
-Los registros de negocio usan siempre `pedidoId`, `timestamp` UTC, `thread`, `evento` y `detalle`. El `pedidoId` permite seguir un pedido entre el API y ambos consumidores.
+`OrderProducer` publica el JSON persistente con `messageId=pedidoId` y espera publisher confirms. `PaymentWorker` usa 50 % de probabilidad de aprobación por intento en los modos normales; `failedAttempts` limita el flujo a cuatro intentos totales. La cola retry espera 750 ms. Tras el cuarto fallo, el productor publica `FailedPayment` en la DLQ. Los listeners usan reconocimiento manual y reconocen el mensaje original después de confirmar la siguiente publicación. Como no hay almacenamiento de idempotencia, un fallo excepcional al confirmar una publicación podría producir una entrega repetida.
+
+`EmailWorker` consume exclusivamente la cola del evento `payment.paid`; verifica `paymentStatus=PAID` antes de registrar el correo simulado y el resumen de bicicletas. Las colas duraderas conservan pedidos mientras un proceso worker está detenido. Si PaymentWorker no está disponible, la API aún puede confirmar la publicación `202` y RabbitMQ mantiene el pedido en `bikestore.payment`. Si EmailWorker no está disponible, el pago puede terminar como `PAID` y la confirmación permanece en `bikestore.email`; al reiniciarlo, continúa desde esa cola. Todos los eventos incluyen `pedidoId`, `timestamp`, `thread`, evento y detalle.
+
+### Pruebas y evidencia
+
+Pruebas unitarias deterministas (sin iniciar la aplicación en `8080`):
+
+```powershell
+.\mvnw.cmd -q "-Dtest=ProcessProfileValidatorTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,OrderSubmissionServiceTest,OrderControllerMvcTest,OrderControllerTest,AssetCacheFilterTest" test
+```
+
+Prueba reproducible de los procesos reales. Requiere compilar primero el JAR; usa solo `bikestore-evaluation-demo`, verifica el vhost y que sus colas estén vacías, inicia y detiene únicamente los PID que creó:
+
+```powershell
+.\scripts\Test-ProcesosIndependientes.ps1
+```
+
+Para los escenarios RabbitMQ con decisiones deterministas en el contexto de pruebas:
+
+```powershell
+.\scripts\Run-RabbitMqDemostracion.ps1
+```
+
+Las dos pruebas de integración confirman el vhost antes de operar. Los scripts abortan si encuentran trabajo o consumidores previos en el vhost de evaluación; nunca purgan el vhost principal. Consulta [docs/DEMOSTRACION.md](docs/DEMOSTRACION.md) para el flujo por proceso, los resultados de tolerancia a fallos y los artefactos capturados, y [docs/PRUEBAS.md](docs/PRUEBAS.md) para los comandos y resultados observados.
 
 ## Pruebas
 
 Las pruebas unitarias deterministas cubren el contrato REST, el precio autoritativo, el mensaje único del carrito, el pago exitoso, los reintentos, la DLQ y la notificación de correo. Para ejecutarlas sin iniciar una aplicación en el puerto 8080:
 
 ```powershell
-.\mvnw.cmd -q "-Dtest=OrderControllerMvcTest,OrderControllerTest,OrderSubmissionServiceTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,AssetCacheFilterTest" test
+.\mvnw.cmd -q "-Dtest=ProcessProfileValidatorTest,OrderControllerMvcTest,OrderControllerTest,OrderSubmissionServiceTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,AssetCacheFilterTest" test
 .\mvnw.cmd -q -DskipTests package
 ```
 
@@ -128,7 +201,7 @@ Para demostrar el flujo completo con RabbitMQ real sin tocar el vhost principal,
 .\scripts\Run-RabbitMqDemostracion.ps1
 ```
 
-El runner verifica que las colas del vhost `bikestore-evaluation-demo` no tengan mensajes ni consumidores, y fija ese vhost en las pruebas que preparan escenarios de pago. No purga colas del vhost principal. Consulta [docs/DEMOSTRACION.md](docs/DEMOSTRACION.md) para el diagrama, resultados, capturas textuales, límites actuales y guion de exposición; los resultados de otras ejecuciones están en [docs/PRUEBAS.md](docs/PRUEBAS.md).
+El runner verifica que las colas del vhost `bikestore-evaluation-demo` no tengan mensajes ni consumidores, y fija ese vhost en las pruebas que preparan escenarios de pago. No purga colas del vhost principal. Consulta [docs/DEMOSTRACION.md](docs/DEMOSTRACION.md) para el diagrama, la ejecución por procesos y los resultados; los resultados acumulados están en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ## Recursos estáticos y caché
 

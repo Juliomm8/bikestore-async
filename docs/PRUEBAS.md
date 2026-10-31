@@ -255,9 +255,9 @@ Antes de publicar se comprobó con `docker compose ps` que el único servicio de
 
 La simulación aleatoria falló en los cuatro intentos y el consumidor dejó ese pedido en `bikestore.payment.dead`. El snapshot no destructivo posterior mostró `bikestore.payment=0`, `bikestore.payment.retry=0`, `bikestore.email=0` y `bikestore.payment.dead=1`; los consumidores existentes de pago y correo seguían conectados. **Ese mensaje de prueba se dejó intacto para análisis: no se purgó, reconoció ni reencoló ninguna cola.** No se detuvo la instancia original de BikeStore ni se modificó otro contenedor.
 
-Por el mensaje pendiente en la DLQ y la instancia activa en 8080, no se ejecutaron `OrderApiIntegrationTest` ni `PaymentIntegrationTest`: sus preparaciones publican en colas compartidas o las vacían. Los escenarios deterministas de éxito, reintentos, DLQ y correo se cubrieron con las pruebas unitarias Maven listadas arriba, sin broker. Las colas se inspeccionaron únicamente con `rabbitmqctl list_queues`.
+En la revisión inicial, por el mensaje pendiente en la DLQ principal y la instancia activa en 8080, se omitió ejecutar `OrderApiIntegrationTest` y `PaymentIntegrationTest` contra el vhost principal. Después se ejecutaron ambas suites mediante el runner aislado en `bikestore-evaluation-demo`; los resultados están en la sección de integración de abajo. Las pruebas unitarias Maven se ejecutaron sin broker.
 
-La comprobación del envío real es un resultado observado de esta sesión. Las decisiones simuladas de pago son aleatorias; el resultado de cuatro fallos describe ese pedido de prueba y no una predicción para pedidos futuros.
+El correo es una simulación: se verificó el evento `EMAIL_SENT`, no un envío SMTP. La observación de cuatro fallos pertenece a un pedido de prueba y no predice resultados futuros; el modo normal conserva la decisión aleatoria del 50 %.
 
 ![Tienda en escritorio con tema claro](evidencia/tema-claro-escritorio.jpg)
 
@@ -267,6 +267,27 @@ La comprobación del envío real es un resultado observado de esta sesión. Las 
 
 Las pruebas `OrderApiIntegrationTest` y `PaymentIntegrationTest` se fijaron al vhost `bikestore-evaluation-demo`; la segunda comprueba ese vhost antes de ejecutar sus purgas. Se agregó `scripts/Run-RabbitMqDemostracion.ps1`, que hace preflight de salud, mensajes, mensajes sin reconocer y consumidores, toma capturas de mensajes/eventos/topología, y aborta si encuentra trabajo activo en el vhost de prueba.
 
-La ejecución final del runner pasó **9 pruebas** con RabbitMQ real: 4 de API y 5 de pagos/correo. Se observaron dos publicaciones HTTP `202` con JSON persistente, pago inmediato, pago al tercer intento, pago al cuarto intento, cuatro fallos con un `FailedPayment` recibido desde la DLQ y ausencia de confirmación de correo para ese fallo. Los IDs y cuerpos observados, los eventos `pedidoId/timestamp/thread`, bindings y estado final están guardados en [docs/evidencia/demostracion/20261031-174818](evidencia/demostracion/20261031-174818); la guía con ejemplos y límites es [docs/DEMOSTRACION.md](DEMOSTRACION.md).
+La ejecución final del runner pasó **9 pruebas** con RabbitMQ real: 4 de API y 5 de pagos/correo. Se observaron dos publicaciones HTTP `202` con JSON persistente, pago inmediato, pago al tercer intento, pago al cuarto intento, cuatro fallos con un `FailedPayment` recibido desde la DLQ y ausencia de confirmación de correo para ese fallo. Los IDs y cuerpos observados, los eventos `pedidoId/timestamp/thread`, bindings y estado final están guardados en [docs/evidencia/demostracion/20261031-184253](evidencia/demostracion/20261031-184253); la guía con ejemplos y límites es [docs/DEMOSTRACION.md](DEMOSTRACION.md).
 
 Al terminar, las colas del vhost aislado tenían cero mensajes y cero consumidores. La cola principal `bikestore.payment.dead` conservó su mensaje pendiente y los consumidores de la instancia activa siguieron conectados; no se ejecutó ninguna purga ni se detuvo ningún contenedor.
+
+## Separación de procesos Java (31 de octubre de 2026)
+
+La aplicación ahora usa `integrated` como perfil predeterminado y perfiles exclusivos `api`, `payment` y `email`. El test de validación también rechaza activar simultáneamente `api,payment` antes de crear el contexto. Payment y email usan `spring.main.web-application-type=none`.
+
+### Pruebas ejecutadas
+
+| Comando o comprobación | Resultado observado |
+| --- | --- |
+| `.\mvnw.cmd -q "-Dtest=ProcessProfileValidatorTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,OrderSubmissionServiceTest,OrderControllerMvcTest,OrderControllerTest,AssetCacheFilterTest" test` | **21 pruebas unitarias aprobadas**, 0 fallos y 0 errores. |
+| `.\scripts\Run-RabbitMqDemostracion.ps1` | **9 pruebas de integración aprobadas** con RabbitMQ real: 4 de API y 5 de pagos/correo, todas en `bikestore-evaluation-demo`. |
+| `.\mvnw.cmd -DskipTests package` | `BUILD SUCCESS`; se generó el JAR ejecutable. |
+| `java -jar target\bikestore-async-0.0.1-SNAPSHOT.jar --spring.profiles.active=api,payment` | Rechazado al iniciar con el mensaje de modos incompatibles; no creó contexto ni consumidor. Resultado negativo esperado. |
+| `.\scripts\Test-ProcesosIndependientes.ps1` | Modo integrado predeterminado y escenarios A–D aprobados con procesos Java reales y PIDs distintos. Evidencia de la corrida final en [20261031-185451](evidencia/procesos/20261031-185451). |
+| Inicio real de `.\mvnw.cmd spring-boot:run` con puerto `18082` y vhost aislado | Perfil integrado predeterminado, HTTP 200, un consumidor por cola; al detenerlo, liberó el puerto y desconectó ambos consumidores. Ver [resumen observado](evidencia/procesos/20261031-184637/spring-boot-run-smoke.txt). |
+
+La evidencia versionada de procesos incluye PID, inicio/apagado, publicaciones HTTP 202, eventos con `pedidoId/timestamp/thread`, reintentos, contenido del `FailedPayment` y conteos de colas antes/después. Está en [docs/evidencia/procesos/20261031-185451](evidencia/procesos/20261031-185451) y se describe en [docs/DEMOSTRACION.md](DEMOSTRACION.md).
+
+El runner comprobó que API no registrara consumidores, que payment registrara solo el consumidor de pagos y que email aislado registrara solo el de correo. Los workers no tenían sockets `Listen`; la API de prueba utilizó `18080` y el modo integrado `18081`. El puerto ocupado `8080` conservó el PID observado `54140` durante las pruebas. Al final, `bikestore-evaluation-demo` quedó con cero mensajes y cero consumidores.
+
+El vhost principal `/` conservó `bikestore.payment.dead=1` con cero mensajes sin reconocer, además de un consumidor en cada cola payment/email perteneciente a la instancia preexistente. No se consumió ni se purgó esa DLQ, no se detuvo esa instancia y no se alteraron contenedores ajenos.
