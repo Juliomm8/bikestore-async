@@ -291,3 +291,25 @@ La evidencia versionada de procesos incluye PID, inicio/apagado, publicaciones H
 El runner comprobó que API no registrara consumidores, que payment registrara solo el consumidor de pagos y que email aislado registrara solo el de correo. Los workers no tenían sockets `Listen`; la API de prueba utilizó `18080` y el modo integrado `18081`. El puerto ocupado `8080` conservó el PID observado `54140` durante las pruebas. Al final, `bikestore-evaluation-demo` quedó con cero mensajes y cero consumidores.
 
 El vhost principal `/` conservó `bikestore.payment.dead=1` con cero mensajes sin reconocer, además de un consumidor en cada cola payment/email perteneciente a la instancia preexistente. No se consumió ni se purgó esa DLQ, no se detuvo esa instancia y no se alteraron contenedores ajenos.
+
+## Demostración estática en GitHub Pages (31 de octubre de 2026)
+
+La publicación usa el workflow [Publicar frontend estático](../.github/workflows/pages.yml), configurado en **Settings → Pages → Build and deployment → Source: GitHub Actions**. El job prepara `_site` copiando únicamente `src/main/resources/static/`; el script transforma el modo a `static`, muestra el aviso informativo y oculta el formulario real. No incorpora código Java, pruebas, documentación, `.env` ni configuración privada.
+
+La publicación verificada es [https://juliomm8.github.io/bikestore-async/](https://juliomm8.github.io/bikestore-async/). El workflow [41258175811](https://github.com/Juliomm8/bikestore-async/actions/runs/41258175811) terminó con `success` en los jobs `build` y `deploy` para el commit `15354a6`. No aparecieron errores de recursos ni mensajes de consola durante la comprobación en Chromium.
+
+### Pruebas ejecutadas
+
+| Comprobación | Resultado observado |
+| --- | --- |
+| `node --check scripts/prepare-github-pages.mjs` y `node --check src/main/resources/static/js/store.js` | Ambos archivos JavaScript pasaron la comprobación de sintaxis. |
+| `node --test scripts/prepare-github-pages.test.mjs` | **2 pruebas correctas**, 0 fallos; valida que el artefacto contiene solo el frontend, activa el modo estático y resuelve las rutas bajo `/bikestore-async/`, incluidas las doce imágenes únicas y las fuentes con versión. |
+| `.\mvnw.cmd -q "-Dtest=ProcessProfileValidatorTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,OrderSubmissionServiceTest,OrderControllerMvcTest,OrderControllerTest,AssetCacheFilterTest" test` | **21 pruebas correctas**, 0 fallos, 0 errores y 0 omitidas. No son pruebas de integración con broker y no vacían colas. |
+| Recursos de la URL pública | En Chromium se revisaron **25 URL** de CSS, JavaScript, cinco fuentes y fotografías; todas respondieron `200`. Las doce fotos del catálogo se cargaron y cada modelo conservó una imagen distinta. |
+| Modo estático y API | La página cargó `bikestore-mode=static`, mostró el aviso y ocultó el formulario. Al despachar un submit de comprobación no se generó identificador ni hubo solicitud a `/api/orders`; la lista de recursos del navegador registró cero solicitudes API. |
+| Catálogo y carrito | El filtro Montaña mostró 2 bicicletas y Todas devolvió 12. Alerce × 2 se guardó en `localStorage`; después de recargar siguió en la bolsa con total estimado de `$3.120,00`. El drawer abrió y `Escape` lo cerró devolviendo el foco a la bolsa. |
+| Tema y ficha rápida | El cambio claro/oscuro persistió después de recargar. La ficha de Alerce mostró su fotografía local completa, precio y características; el encabezado de la demo mantiene contraste en ambos temas. |
+| Responsive y capturas | Se revisaron y capturaron visualmente la página pública en Chromium a **1440 × 900** y **390 × 844**. En móvil se comprobó que el menú abre/cierra con `Escape`, que el foco vuelve al botón y que no hay desbordamiento horizontal (`scrollWidth=390`). |
+| Compatibilidad local | En un proceso temporal con perfil `api` en el puerto `18080`, `GET /` y `HEAD` a CSS, JS, fuente y fotografías versionadas devolvieron `200`; la página mantuvo `bikestore-mode=server`. El proceso de comprobación se detuvo sin tocar el proceso que ocupaba 8080. |
+
+La navegación a Pages no conecta con Java, RabbitMQ ni `POST /api/orders`; los totales mostrados son estimados y el carrito se limita al almacenamiento local del navegador. El envío real y las confirmaciones asíncronas solo se comprueban al ejecutar el backend local. La revisión pública no ejecutó pagos, envíos de correo ni pruebas de RabbitMQ.

@@ -2,6 +2,10 @@
 
 Aplicación académica de pedidos de bicicletas con Java 17, Spring Boot 4.1.2 y RabbitMQ 4. El API acepta pedidos y responde de inmediato con un `pedidoId`; el pago y la confirmación de correo se simulan de forma asíncrona. No hay base de datos, cobros ni correos reales.
 
+> **[Abrir la demostración visual en GitHub Pages](https://juliomm8.github.io/bikestore-async/)**
+>
+> Pages publica únicamente la tienda estática: puedes recorrer el catálogo, filtrar, abrir fichas y usar una bolsa local que se guarda en este navegador. No envía pedidos ni genera `pedidoId`; el procesamiento asíncrono requiere ejecutar la aplicación y RabbitMQ con los pasos siguientes. Consulta la [arquitectura](docs/DEMOSTRACION.md) y los [resultados de pruebas](docs/PRUEBAS.md).
+
 ## Requisitos y arranque en Windows
 
 - Java 17, Docker Desktop, PowerShell y Git.
