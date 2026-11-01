@@ -1,5 +1,6 @@
 const money = new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' });
 const categoryNames = { gravel: 'Gravel', ruta: 'Ruta', 'montaña': 'Montaña', urbana: 'Ciudad' };
+const staticDemo = document.querySelector('meta[name="bikestore-mode"]')?.content === 'static';
 const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
 let reduceMotion = motionPreference.matches;
 const themeToggle = document.querySelector('#theme-toggle');
@@ -58,6 +59,16 @@ let focusOrderAfterDrawerClose = false;
 let selected = null;
 let activeFilter = 'todas';
 let sending = false;
+
+if (staticDemo) {
+  $('#static-demo-banner').hidden = false;
+  $('#static-order-note').hidden = false;
+  form.hidden = true;
+  $('.cart-intro').textContent = 'Explora la selección y ajusta las cantidades; el total mostrado es solo una estimación.';
+  $('#cart-drawer-description').textContent = 'Tu selección se guarda en este navegador para esta demostración visual.';
+  $('#drawer-price-note').textContent = 'Total estimado del catálogo. No se envía ningún pedido ni se procesa un pago.';
+  drawerContinue.textContent = 'Ver resumen del carrito';
+}
 
 const findProduct = id => products.find(product => product.id === id);
 
@@ -419,6 +430,7 @@ email.addEventListener('input', () => {
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
+  if (staticDemo) return;
   if (sending) return;
   if (!cart.size) {
     showFeedback('Añade al menos una bicicleta antes de confirmar el pedido.', 'error');

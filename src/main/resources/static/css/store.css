@@ -1,8 +1,8 @@
-@font-face { font-family: "Cormorant Garamond"; font-weight: 300; font-style: normal; font-display: swap; src: url("/fonts/cormorant-garamond-latin-300-normal.woff2?v=20261031-8") format("woff2"); }
-@font-face { font-family: "Cormorant Garamond"; font-weight: 300; font-style: italic; font-display: swap; src: url("/fonts/cormorant-garamond-latin-300-italic.woff2?v=20261031-8") format("woff2"); }
-@font-face { font-family: "Cormorant Garamond"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/cormorant-garamond-latin-500-normal.woff2?v=20261031-8") format("woff2"); }
-@font-face { font-family: "Hanken Grotesk"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/hanken-grotesk-latin-400-normal.woff2?v=20261031-8") format("woff2"); }
-@font-face { font-family: "Hanken Grotesk"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/hanken-grotesk-latin-500-normal.woff2?v=20261031-8") format("woff2"); }
+@font-face { font-family: "Cormorant Garamond"; font-weight: 300; font-style: normal; font-display: swap; src: url("../fonts/cormorant-garamond-latin-300-normal.woff2?v=20261031-8") format("woff2"); }
+@font-face { font-family: "Cormorant Garamond"; font-weight: 300; font-style: italic; font-display: swap; src: url("../fonts/cormorant-garamond-latin-300-italic.woff2?v=20261031-8") format("woff2"); }
+@font-face { font-family: "Cormorant Garamond"; font-weight: 500; font-style: normal; font-display: swap; src: url("../fonts/cormorant-garamond-latin-500-normal.woff2?v=20261031-8") format("woff2"); }
+@font-face { font-family: "Hanken Grotesk"; font-weight: 400; font-style: normal; font-display: swap; src: url("../fonts/hanken-grotesk-latin-400-normal.woff2?v=20261031-8") format("woff2"); }
+@font-face { font-family: "Hanken Grotesk"; font-weight: 500; font-style: normal; font-display: swap; src: url("../fonts/hanken-grotesk-latin-500-normal.woff2?v=20261031-8") format("woff2"); }
 
 :root {
   --bone: #e9e6de;
@@ -81,6 +81,11 @@ code { font-size: .9em; }
 .site-nav__order { border: 1px solid currentColor; padding: .45rem 1rem !important; background: none !important; transition: background-color .25s, color .25s; }
 .site-nav__order:hover { background: var(--bone) !important; color: var(--ink); }
 .site-header.is-solid .site-nav__order:hover { background: var(--ink) !important; color: var(--bone); }
+.demo-banner { position: relative; z-index: 40; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 1rem; margin-top: var(--header-h); padding: .65rem var(--gutter); border-bottom: 1px solid var(--line); background: var(--bone-deep); font-size: .82rem; }
+.demo-banner[hidden], .static-order-note[hidden] { display: none; }
+.demo-banner__label { color: var(--green); font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+.demo-banner p { color: var(--stone); }
+.demo-banner a { text-decoration-color: var(--ember); text-underline-offset: .2em; white-space: nowrap; }
 .menu-toggle { display: none; min-width: 2.75rem; min-height: 2.75rem; background: none; border: 0; padding: .5rem 0; cursor: pointer; font-size: .9rem; }
 .header-actions { display: flex; align-items: center; gap: .35rem; }
 .icon-button { position: relative; display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; border: 0; padding: .5rem; background: transparent; color: inherit; cursor: pointer; }
@@ -303,6 +308,9 @@ code { font-size: .9em; }
 .form-feedback.is-error { color: var(--error); }
 .form-feedback.is-loading { color: var(--stone); }
 .form-note { margin-top: .75rem; color: var(--stone); font-size: .85rem; max-width: 50ch; }
+.static-order-note { display: grid; gap: .85rem; max-width: 48rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+.static-order-note p { color: var(--stone); font-size: .92rem; }
+.static-order-note .link-button { justify-self: start; }
 .confirmation { opacity: 0; transform: translateY(.75rem); transition: opacity .8s var(--ease), transform .8s var(--ease); }
 .confirmation.is-in { opacity: 1; transform: none; }
 .confirmation:focus { outline: none; }
@@ -339,6 +347,8 @@ code { font-size: .9em; }
 
 @media (max-width: 720px) {
   :root { --header-h: 3.75rem; }
+  .demo-banner { grid-template-columns: 1fr; gap: .2rem; padding-block: .55rem; }
+  .demo-banner a { justify-self: start; margin-top: .2rem; }
   .menu-toggle { display: block; }
   .site-nav {
     position: fixed; inset: var(--header-h) 0 0 0; background: var(--bone); color: var(--ink);
