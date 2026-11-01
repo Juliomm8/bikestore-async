@@ -35,7 +35,7 @@ public class ConfirmedPublisher {
         rabbitTemplate.send(exchange, routingKey, message, correlation);
         try {
             CorrelationData.Confirm confirm = correlation.getFuture().get(5, TimeUnit.SECONDS);
-            if (!confirm.isAck() || correlation.getReturned() != null) {
+            if (!confirm.ack() || correlation.getReturned() != null) {
                 throw new IllegalStateException("RabbitMQ no confirmó pedidoId=" + pedidoId);
             }
         } catch (Exception exception) {
