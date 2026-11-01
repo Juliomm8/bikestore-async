@@ -60,4 +60,5 @@ jobs:
         run: |
           bash ./mvnw -B -ntp -Pempaquetado-alternativo -DskipTests package
           test -f target/empaquetado-alternativo/bikestore-async-0.0.1-SNAPSHOT.jar
-          jar tf target/empaquetado-alternativo/bikestore-async-0.0.1-SNAPSHOT.jar | grep -q '^BOOT-INF/'
+          jar tf target/empaquetado-alternativo/bikestore-async-0.0.1-SNAPSHOT.jar > "$RUNNER_TEMP/bikestore-jar-entradas.txt"
+          grep -q '^BOOT-INF/' "$RUNNER_TEMP/bikestore-jar-entradas.txt"
