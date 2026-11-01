@@ -155,6 +155,20 @@ El API atiende el puerto `8080`; los dos workers no abren puertos HTTP. Cada ter
 
 En RabbitMQ Management (`http://127.0.0.1:15672`), revisa **Connections** para ver las conexiones de los procesos y **Queues** para comprobar un consumidor en `bikestore.payment` y otro en `bikestore.email`. El perfil `api` abre su conexión al publicar el primer pedido; payment y email la abren al conectarse. Usa las credenciales locales de `.env`. Ejecuta el modo integrado o los tres procesos distribuidos en una sesión, no ambos a la vez.
 
+ 
+#### Empaquetado seguro cuando el JAR está en uso (Windows)
+
+Si una instancia Java está usando `target/bikestore-async-0.0.1-SNAPSHOT.jar`, Windows puede impedir que Maven lo reemplace. **No es necesario finalizar ese proceso ni borrar el JAR** para generar una nueva compilación. Utiliza el perfil Maven opcional:
+
+```powershell
+.\mvnw.cmd -Pempaquetado-alternativo -DskipTests package
+```
+
+El nuevo ejecutable se genera en `target/empaquetado-alternativo/bikestore-async-0.0.1-SNAPSHOT.jar` y el JAR anterior permanece intacto. La compilación normal `.\mvnw.cmd -DskipTests package` continúa usando `target/`.
+
+El JAR alternativo **no sustituye al proceso que está ejecutándose**: para iniciar el nuevo código en el puerto 8080, detén manualmente la instancia anterior con `Ctrl+C` y después inicia la nueva. No ejecutes ambos modos de la aplicación a la vez contra las mismas colas. Las pruebas unitarias y de integración deben ejecutarse por separado; `-DskipTests` solo omite su ejecución durante ese empaquetado.
+
+
 ### Exchanges, rutas y colas
 
 | Exchange | Routing key | Cola | Uso |
