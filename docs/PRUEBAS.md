@@ -323,3 +323,22 @@ El workflow [Verificar proyecto](../.github/workflows/ci.yml) se ejecuta en cada
 La ejecución real [41260672079](https://github.com/Juliomm8/bikestore-async/actions/runs/41260672079), sobre `2806c07`, terminó con `success`: sintaxis, seis pruebas Node, 21 pruebas Java y empaquetado Maven pasaron. El build anotó únicamente el aviso ya existente de que `CorrelationData.Confirm.isAck()` está obsoleto y marcado para eliminación; no impidió las pruebas ni el empaquetado.
 
 El empaquetado también se verificó desde una copia temporal de los archivos versionados en `%TEMP%`, sin `.env` y sin bloquear ni detener la aplicación del puerto `8080`. `mvnw.cmd -DskipTests package` terminó correctamente y el JAR generado incluyó 133 entradas `BOOT-INF/`, confirmando que es ejecutable.
+
+## Captura local de aceptación y flujo por tres procesos (31 de octubre de 2026)
+
+Se hizo una comprobación manual adicional para obtener una captura real de la confirmación del formulario. Antes de iniciar, el vhost **bikestore-evaluation-demo** tenía sus cuatro colas sin mensajes, sin mensajes sin reconocer y sin consumidores. La prueba se dirigió explícitamente a ese vhost; no se publicó ni se consumió nada del vhost principal.
+
+Se iniciaron tres procesos Spring Boot separados: API en el puerto 18083 (PID 55072), PaymentWorker (PID 34736) y EmailWorker (PID 63736). Se dejó activa la instancia preexistente en el puerto 8080 (PID 61944). El perfil de evaluación hizo determinista el resultado del pago para esta comprobación.
+
+Desde el formulario servido por la API local se registró una bicicleta Alerce para captura-academica@example.test. La interfaz mostró la aceptación y el identificador siguiente. La captura se tomó en ese momento, cuando la pantalla todavía indica correctamente que el pago se procesa de forma asíncrona:
+
+- pedidoId: **a1debf45-bc41-49dd-a3de-202e0cb73a8b**
+- [Captura del formulario aceptado](capturas/pedido-aceptado-frontend.jpg)
+- [Archivo de eventos de la ejecución de integración aislada](evidencia/demostracion/20261031-184253/mensajes-y-eventos.log)
+- [Captura de logs con pedidoId, timestamp y thread](capturas/logs-trazabilidad.jpg)
+
+Los logs de la ejecución mostraron los eventos ORDER_ACCEPTED, PAYMENT_ATTEMPT (intento 1 de 4), PAYMENT_PAID y EMAIL_SENT, todos con el mismo pedidoId. El pago fue inmediato en este caso; los otros resultados (éxito tras reintentos y fallo definitivo) se verificaron por separado con la suite determinista de nueve pruebas RabbitMQ descrita en [Demostración de procesos](DEMOSTRACION.md). Esa suite, y no el resultado aleatorio de producción, respalda las comprobaciones del límite de reintentos y de la DLQ.
+
+Después del procesamiento, una consulta de solo lectura a Management mostró cero mensajes en bikestore.payment, bikestore.payment.retry, bikestore.email y bikestore.payment.dead del vhost de evaluación; payment y email tenían cada uno un consumidor. Se detuvieron únicamente las tres terminales creadas para la captura mediante Ctrl+C. La consulta posterior mostró cero mensajes y cero consumidores en esas cuatro colas. Los procesos identificados por los PID de la prueba dejaron de existir y el proceso preexistente del puerto 8080 siguió activo.
+
+No se purgó ninguna cola, no se consultó ni se reconoció el mensaje que permanece en la DLQ principal, no se detuvo el contenedor RabbitMQ y no se interrumpió la instancia previa.
