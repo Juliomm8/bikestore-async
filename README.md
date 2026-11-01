@@ -1,228 +1,431 @@
 # BikeStore Async v1.0
 
-Aplicación académica de pedidos de bicicletas con Java 17, Spring Boot 4.1.2 y RabbitMQ 4. El API acepta pedidos y responde de inmediato con un `pedidoId`; el pago y la confirmación de correo se simulan de forma asíncrona. No hay base de datos, cobros ni correos reales.
+**Informe técnico breve — Diseño y Arquitectura de Software**
 
-> **[Abrir la demostración visual en GitHub Pages](https://juliomm8.github.io/bikestore-async/)**
->
-> Pages publica únicamente la tienda estática: puedes recorrer el catálogo, filtrar, abrir fichas y usar una bolsa local que se guarda en este navegador. No envía pedidos ni genera `pedidoId`; el procesamiento asíncrono requiere ejecutar la aplicación y RabbitMQ con los pasos siguientes. Consulta la [arquitectura](docs/DEMOSTRACION.md) y los [resultados de pruebas](docs/PRUEBAS.md).
+> **Demostración visual:** [juliomm8.github.io/bikestore-async](https://juliomm8.github.io/bikestore-async/)<br>
+> La página de GitHub Pages publica solo el frontend estático. No ejecuta Java, RabbitMQ ni el endpoint de pedidos. Para comprobar el flujo asíncrono se debe iniciar el backend localmente.
 
-## Requisitos y arranque en Windows
+[Arquitectura y resultados de integración](docs/DEMOSTRACION.md) · [Pruebas y evidencia](docs/PRUEBAS.md) · [Fuentes de imágenes](docs/IMAGENES.md) · [Historial de CI](https://github.com/Juliomm8/bikestore-async/actions/workflows/ci.yml)
 
-- Java 17, Docker Desktop, PowerShell y Git.
-- Puertos locales libres: 8080 para Spring Boot, 5672 para AMQP y 15672 para la administración de RabbitMQ.
+## 1. Contexto académico y objetivo
 
-```powershell
-git clone https://github.com/Juliomm8/bikestore-async.git
-Set-Location bikestore-async
-Copy-Item .env.example .env
-```
+BikeStore Async se desarrolló para el deber de **Diseño y Arquitectura de Software**. El objetivo académico es recibir un pedido por una API, publicarlo como un mensaje JSON persistente en RabbitMQ y procesarlo de forma asíncrona mediante dos responsabilidades independientes: el pago simulado y la confirmación de correo simulada.
 
-Edita `.env` y reemplaza la contraseña de ejemplo por una clave local. El archivo `.env` está ignorado por Git. Inicia exclusivamente el servicio RabbitMQ de este proyecto:
+La entrega permite revisar el flujo con RabbitMQ real, observar los reintentos y la Dead-Letter Queue (DLQ), y ejecutar la API y cada consumidor en procesos Java distintos. Se conserva también el modo integrado de desarrollo para compatibilidad y pruebas locales.
 
-```powershell
-docker compose up -d rabbitmq
-docker compose ps
-```
+## 2. Resumen del sistema
 
-Desde una terminal PowerShell abierta en la raíz del proyecto, inicia Spring Boot. La aplicación importa `.env` automáticamente y conecta a RabbitMQ mediante `127.0.0.1:5672`; no necesitas exportar variables en la terminal:
+El cliente envía un pedido con uno o varios modelos de bicicleta. La API valida el correo, los modelos y las cantidades; obtiene los precios oficiales del catálogo del servidor; crea un identificador único de pedido; y solicita a OrderProducer la publicación del JSON. La respuesta HTTP 202 confirma que el mensaje fue aceptado por RabbitMQ, no que el pago ya haya terminado.
 
-```powershell
-.\mvnw.cmd spring-boot:run
-```
+PaymentWorker simula el cobro con una probabilidad de fallo del 50 % en cada intento. Tras el intento inicial admite tres reintentos adicionales. Si el pago queda aprobado, publica el evento payment.paid; EmailWorker consume ese evento y registra una confirmación simulada. Si se agotan los cuatro intentos, el detalle del fallo llega a la DLQ. No se usan cobros, correo SMTP ni servicios comerciales reales.
 
-Abre [http://localhost:8080/](http://localhost:8080/) para usar el formulario. El panel de RabbitMQ está en [http://localhost:15672/](http://localhost:15672/); utiliza las credenciales locales de `.env`.
+El proyecto usa Java 17, Spring Boot 4.1.2, Maven y RabbitMQ 4. No requiere base de datos.
 
-## Catálogo y formulario
+## 3. Correspondencia entre el enunciado y la implementación
 
-La página principal es una tienda editorial con doce bicicletas ficticias de gravel, ruta, montaña y ciudad (catálogo en `static/js/catalog.js`). Puedes filtrar categorías y agregar modelos distintos al carrito, cambiar cantidades o quitar líneas; el subtotal y el total se actualizan automáticamente. Al confirmar, el navegador envía un solo pedido con varios artículos. La página muestra el `pedidoId`, el total aceptado por el servidor y recuerda que el pago continúa de forma asíncrona. Las fotografías WebP se sirven desde el proyecto; su procedencia está en [docs/IMAGENES.md](docs/IMAGENES.md).
+| Requisito académico | Implementación | Evidencia para revisar |
+| --- | --- | --- |
+| Recibir pedidos mediante un API REST | POST /api/orders, validación del cuerpo y respuesta HTTP 202 con un solo pedidoId | [Contrato y pruebas](docs/PRUEBAS.md), [captura de confirmación](docs/capturas/pedido-aceptado-frontend.jpg), [registro de HTTP 202](docs/capturas/pedido-aceptado.jpg) |
+| Publicar un mensaje JSON en RabbitMQ | OrderProducer publica JSON persistente con confirmación del broker | [OrderProducer](src/main/java/com/bikestore/asyncapp/messaging/OrderProducer.java), [eventos y colas probados](docs/DEMOSTRACION.md) |
+| Simular fallos y reintentar el pago | RandomPaymentDecision conserva el 50 % por intento; PaymentWorker realiza un intento inicial y hasta tres adicionales | [PaymentWorker](src/main/java/com/bikestore/asyncapp/payment/PaymentWorker.java), [resultados de pruebas](docs/PRUEBAS.md) |
+| Enviar a DLQ al agotar los intentos | El fallo final conserva pedidoId, intentos y motivo en bikestore.payment.dead | [mensaje de DLQ](docs/capturas/mensaje-dlq.jpg), [pruebas de integración](docs/DEMOSTRACION.md) |
+| Confirmar solo pagos aprobados | EmailWorker consume payment.paid y valida paymentStatus=PAID; el emisor es simulado | [EmailWorker](src/main/java/com/bikestore/asyncapp/email/EmailWorker.java), [logs](docs/capturas/logs-trazabilidad.jpg) |
+| Registrar trazabilidad | Los eventos incluyen pedidoId, timestamp, thread, nombre de evento y detalle | [captura de logs](docs/capturas/logs-trazabilidad.jpg), [archivo de eventos](docs/evidencia/demostracion/20261031-184253/mensajes-y-eventos.log) |
+| Separar API y consumidores | El mismo JAR ofrece perfiles api, payment y email; cada rol puede ejecutarse con un PID propio. El perfil integrado conserva el arranque anterior | [prueba de procesos](docs/DEMOSTRACION.md), [captura de procesos](docs/capturas/procesos-independientes.jpg) |
+| Mostrar la tienda sin desplegar el backend | GitHub Pages sirve el catálogo y el carrito local, pero no envía pedidos ni inventa identificadores o pagos | [demo estática](https://juliomm8.github.io/bikestore-async/), [verificación](docs/PRUEBAS.md) |
 
-Este catálogo es una demostración académica. Los precios estimados que ves en el navegador se leen del catálogo de JavaScript en `static/js/catalog.js`; son orientativos y el cliente puede modificarlos, así que no representan precios comerciales confiables. Al recibir el pedido, el backend valida los modelos y calcula el total oficial con el catálogo inmutable de `CatalogPriceService`, sin confiar en importes del navegador.
+## 4. Arquitectura general
 
-### Tema, bolsa y fichas rápidas
+~~~mermaid
+flowchart LR
+    Browser["Navegador<br/>tienda y formulario"] -->|POST /api/orders| API["Proceso Java API<br/>OrderController"]
+    API --> Submission["OrderSubmissionService<br/>validación y precios oficiales"]
+    Submission --> Producer["OrderProducer<br/>JSON persistente y publisher confirm"]
 
-La barra superior incluye el cambio de tema y la bolsa. En la primera visita, el tema sigue `prefers-color-scheme`; el selector se aplica antes de cargar la hoja de estilos, para evitar un destello del tema contrario. La preferencia manual se recuerda en `localStorage` (`bikestore.theme`) y el sistema se sigue mientras no se elija un tema explícito.
+    subgraph RabbitMQ["RabbitMQ · vhost configurado"]
+        OrdersX{{"bikestore.orders"}}
+        PaymentQ[("bikestore.payment")]
+        RetryX{{"bikestore.retry"}}
+        RetryQ[("bikestore.payment.retry<br/>TTL 750 ms")]
+        EventsX{{"bikestore.events"}}
+        EmailQ[("bikestore.email")]
+        DeadX{{"bikestore.dead"}}
+        DeadQ[("bikestore.payment.dead")]
+        OrdersX --> PaymentQ
+        RetryX --> RetryQ
+        RetryQ -->|TTL cumplido| OrdersX
+        EventsX --> EmailQ
+        DeadX --> DeadQ
+    end
 
-La bolsa lateral permite editar cantidades, revisar subtotales, quitar modelos y continuar al formulario. Se conserva en `localStorage` únicamente el identificador del modelo y su cantidad (`bikestore.cart.v1`); al restaurar, los modelos se contrastan con el catálogo actual de JavaScript y los subtotales siguen siendo estimaciones del navegador. Al confirmar, el servidor vuelve a validar los modelos y obtiene los precios oficiales desde `CatalogPriceService`. La ficha rápida muestra una fotografía completa, descripción y características sin salir del catálogo. Los diálogos se pueden recorrer con teclado, cierran con `Escape`, contienen el foco y lo devuelven al control que los abrió. Las animaciones respetan `prefers-reduced-motion`.
+    Producer -->|payment.requested| OrdersX
+    PaymentQ --> Payment["Proceso Java Payment<br/>PaymentWorker"]
+    Payment -->|payment.retry| RetryX
+    Payment -->|payment.paid| EventsX
+    Payment -->|payment.failed| DeadX
+    EmailQ --> Email["Proceso Java Email<br/>EmailWorker"]
+~~~
 
-Vistas verificadas en Chromium: [escritorio, tema claro](docs/evidencia/tema-claro-escritorio.jpg) y [móvil, tema oscuro](docs/evidencia/tema-oscuro-movil.jpg). El detalle de las comprobaciones está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
+Los tres roles pueden conectarse al mismo broker y vhost. En modo distribuido se ejecutan como procesos del sistema operativo distintos; el intercambio entre ellos ocurre mediante RabbitMQ, no mediante llamadas directas entre JVM.
 
-## API
+### Separación en tres procesos Java
 
-`POST /api/orders` recibe JSON con una lista de artículos. Un pedido válido responde `202 Accepted` y un solo `pedidoId`:
+~~~mermaid
+flowchart LR
+    subgraph APIProcess["Proceso Java · perfil api · PID propio"]
+        Web["Frontend y API REST"] --> Producer["OrderProducer"]
+    end
+    subgraph PaymentProcess["Proceso Java · perfil payment · PID propio"]
+        Payment["PaymentWorker"]
+    end
+    subgraph EmailProcess["Proceso Java · perfil email · PID propio"]
+        Email["EmailWorker"]
+    end
+    subgraph Broker["RabbitMQ"]
+        PaymentQueue[("bikestore.payment")]
+        EmailQueue[("bikestore.email")]
+        OrdersExchange{{"bikestore.orders"}}
+        EventsExchange{{"bikestore.events"}}
+        OrdersExchange --> PaymentQueue
+        EventsExchange --> EmailQueue
+    end
+    Producer --> OrdersExchange
+    PaymentQueue --> Payment
+    Payment --> EventsExchange
+    EmailQueue --> Email
+~~~
 
-```json
+Cada proceso carga solo su perfil. En modo integrado, los mismos componentes pueden convivir en una sola JVM durante el desarrollo local.
+
+### Exchanges, routing keys y colas
+
+Los exchanges son directos y duraderos; las colas son duraderas. Las rutas vigentes se declaran en RabbitTopology:
+
+| Exchange | Routing key | Cola destino | Uso y configuración relevante |
+| --- | --- | --- | --- |
+| bikestore.orders | payment.requested | bikestore.payment | Pedido que espera el procesamiento del pago |
+| bikestore.retry | payment.retry | bikestore.payment.retry | Espera 750 ms y vuelve a bikestore.orders con payment.requested |
+| bikestore.events | payment.paid | bikestore.email | Evento de pago aprobado que procesa EmailWorker |
+| bikestore.dead | payment.failed | bikestore.payment.dead | Fallo definitivo y mensajes rechazados sin reencolar |
+
+## 5. Componentes principales
+
+| Componente | Responsabilidad |
+| --- | --- |
+| OrderController y OrderSubmissionService | Reciben y validan la solicitud, calculan el pedido con precios del servidor y devuelven el resultado de aceptación |
+| CatalogPriceService | Mantiene la lista académica de modelos y precios autorizados por el backend |
+| OrderProducer y ConfirmedPublisher | Serializan y publican el mensaje persistente, y verifican la confirmación de RabbitMQ |
+| RabbitTopology | Declara exchanges directos, colas duraderas, bindings, TTL y rutas de dead-letter |
+| PaymentWorker | Simula el pago, decide el resultado por intento y publica el evento correspondiente |
+| RandomPaymentDecision | Provee la decisión aleatoria del 50 % usada en ejecución normal |
+| EvaluationPaymentConfiguration | Provee decisiones deterministas para las pruebas aisladas |
+| EmailWorker y SimulatedEmailSender | Procesan únicamente pagos PAID y registran una confirmación sin conectarse a SMTP |
+| ProcessProfileValidator | Evita activar a la vez perfiles de rol incompatibles |
+| AssetCacheFilter | Define políticas de caché HTTP para recursos estáticos versionados |
+| Frontend estático | Catálogo de demostración, filtros, fichas, tema claro/oscuro y carrito en HTML, CSS y JavaScript |
+
+El detalle de paquetes y responsabilidades se puede seguir desde los enlaces de la tabla y desde src/main/java/com/bikestore/asyncapp/.
+
+## 6. Flujo de procesamiento de un pedido
+
+~~~mermaid
+sequenceDiagram
+    actor Cliente
+    participant API as API / OrderProducer
+    participant Broker as RabbitMQ
+    participant Payment as PaymentWorker
+    participant Email as EmailWorker
+
+    Cliente->>API: POST /api/orders
+    API->>API: Validar datos y resolver precios oficiales
+    API->>Broker: JSON persistente · payment.requested
+    Broker-->>API: Publisher confirm
+    API-->>Cliente: HTTP 202 + pedidoId
+
+    Broker->>Payment: Entrega desde bikestore.payment
+    Payment->>Payment: Simula un intento de pago
+    alt Pago PAID
+        Payment->>Broker: Publicar payment.paid
+        Payment->>Broker: ACK del pedido procesado
+        Broker->>Email: Entrega desde bikestore.email
+        Email->>Email: Validar PAID y simular confirmación
+        Email->>Broker: ACK del evento
+    else Pago fallido y quedan reintentos
+        Payment->>Broker: Enviar a bikestore.payment.retry
+        Payment->>Broker: ACK del mensaje original
+    else Se agotaron los cuatro intentos
+        Payment->>Broker: Publicar FailedPayment en la DLQ
+        Payment->>Broker: ACK del mensaje original
+    end
+~~~
+
+La respuesta 202 representa aceptación del mensaje por el broker. El estado final se observa después en los logs y en el evento de pago o la DLQ.
+
+## 7. Reintentos y Dead-Letter Queue
+
+~~~mermaid
+flowchart TD
+    A["bikestore.payment<br/>intento actual"] --> B{"Resultado de pago"}
+    B -->|Aprobado| C["Publicar payment.paid"]
+    C --> D["bikestore.email"]
+
+    B -->|Fallido, intento 1 a 3| E["bikestore.retry<br/>payment.retry"]
+    E --> F["bikestore.payment.retry<br/>TTL 750 ms"]
+    F -->|Vencimiento| A
+
+    B -->|Fallido en intento 4| G["Publicar payment.failed"]
+    G --> H["bikestore.payment.dead"]
+~~~
+
+El mecanismo tiene un límite explícito: cuatro intentos en total (uno inicial y tres adicionales). La cola de reintento espera 750 ms antes de devolver el mensaje a la ruta de pago. Después del cuarto fallo se conserva un mensaje FailedPayment con el identificador del pedido, el número de intentos y el motivo. El pedido fallido no produce payment.paid y, por tanto, no genera una confirmación de correo.
+
+La probabilidad del 50 % corresponde a cada intento en la ejecución normal. Las pruebas usan decisiones deterministas para verificar los distintos resultados sin depender del azar.
+
+## 8. Decisiones de arquitectura y justificación
+
+**RabbitMQ para desacoplar productores y consumidores.** La API no espera a que terminen el cobro simulado ni la confirmación de correo. Publica el pedido y responde cuando el broker confirma el mensaje. Esto permite que un worker esté detenido temporalmente sin bloquear la recepción de pedidos; las colas duraderas conservan los mensajes hasta que el consumidor vuelva.
+
+**Pago y correo como responsabilidades distintas.** Pago y correo tienen ritmos, errores y condiciones de ejecución diferentes. PaymentWorker comunica el éxito mediante payment.paid; EmailWorker consume ese evento desde otra cola. Si ambos compartieran una sola cola, competirían por los mismos mensajes y el correo podría no recibir el resultado del pago. La cola separada evita esa ambigüedad.
+
+**Reintentos acotados y DLQ.** Un error transitorio puede resolverse en otro intento, pero repetir indefinidamente generaría ciclos y ocultaría fallos permanentes. El TTL en la cola de reintento regula la pausa, el máximo de cuatro intentos pone un límite y la DLQ conserva fallos para inspección sin devolverlos al flujo normal.
+
+**ACK manual y publisher confirms.** Los confirms permiten a la API comprobar la aceptación de publicación; el ACK manual permite reconocer un mensaje de entrada después de que el worker complete el paso correspondiente. Para un reintento, primero se publica la copia en la ruta de espera y después se reconoce el mensaje original. Este diseño evita reconocer silenciosamente el original si falla su republicación. Como no hay base de datos ni almacén de idempotencia, la solución académica no promete entrega exactamente una vez ante todos los fallos de red.
+
+**Precio autoritativo en el backend.** El navegador usa el catálogo JavaScript para mostrar precios estimados y mantener el carrito. Esos valores se pueden modificar desde el cliente, por lo que no se consideran confiables. Al recibir el pedido, CatalogPriceService valida cada modelo y calcula el total oficial en el servidor; no se agrega una base de datos para este catálogo académico.
+
+**Un JAR y perfiles para tres procesos.** Los perfiles api, payment y email seleccionan los componentes de un rol y permiten ejecutarlos con PID independientes, sin crear tres proyectos o servicios innecesarios. El perfil integrado permanece como opción local compatible, aunque sus consumidores comparten JVM con la API.
+
+**GitHub Pages como vista estática.** Pages publica los archivos de src/main/resources/static y permite revisar el diseño sin instalar Java o RabbitMQ. Al ser alojamiento estático, no puede ejecutar el endpoint; por seguridad y honestidad, el frontend publicado no envía pedidos ni presenta un pedidoId, pago o correo ficticio como resultado real.
+
+## 9. API de pedidos
+
+### Solicitud
+
+~~~http
+POST /api/orders
+Content-Type: application/json
+~~~
+
+~~~json
 {
-  "customerEmail": "ana@example.com",
+  "customerEmail": "ciclista@example.test",
   "items": [
-    { "bikeModel": "Alerce", "quantity": 2 },
-    { "bikeModel": "Ruta Clara", "quantity": 1 }
+    {
+      "bikeModel": "Alerce",
+      "quantity": 1
+    },
+    {
+      "bikeModel": "Ruta Clara",
+      "quantity": 2
+    }
   ]
 }
-```
+~~~
 
-```json
-{
-  "pedidoId": "46513cc1-0b3a-4cbb-a18d-a9f64a5ca7e5",
-  "status": "ACCEPTED",
-  "total": 4170.00
-}
-```
+El servidor valida el correo, las líneas, los modelos y las cantidades. Resuelve los precios desde su propio catálogo; cualquier precio enviado por el navegador no es la fuente de verdad.
 
-`customerEmail` debe ser un correo válido; cada `bikeModel` debe existir en el catálogo del servidor y cada `quantity` debe estar entre 1 y 99. La lista acepta hasta 12 líneas y los artículos repetidos se combinan. Los datos inválidos reciben HTTP `400`. `ACCEPTED` significa que RabbitMQ confirmó la publicación, no que el pago haya terminado.
+### Respuesta
 
-Por compatibilidad, el API también acepta el formato anterior de un artículo (`bikeModel`, `quantity` y `unitPrice`), pero siempre ignora el precio recibido y toma el importe del catálogo del servidor. El formulario actual no envía precios.
+Una solicitud válida se responde con HTTP 202 Accepted y un pedidoId único para todos los artículos. La aceptación indica que el pedido quedó publicado para procesamiento asíncrono; el pago puede resolverse después. Las solicitudes inválidas reciben HTTP 400 con errores de validación.
 
-Ejemplo desde PowerShell:
+## 10. Ejecución local: modo integrado
 
-```powershell
-$body = @{
-    customerEmail = 'ana@example.com'
-    items = @(
-        @{ bikeModel = 'Alerce'; quantity = 2 },
-        @{ bikeModel = 'Ruta Clara'; quantity = 1 }
-    )
-} | ConvertTo-Json
-Invoke-RestMethod -Uri 'http://localhost:8080/api/orders' -Method Post -ContentType 'application/json' -Body $body
-```
+Requisitos: Git, Java 17, Docker Desktop y PowerShell. Desde una terminal en Windows:
 
-## Arquitectura
+~~~powershell
+git clone https://github.com/Juliomm8/bikestore-async.git
+Set-Location bikestore-async
 
-```mermaid
-flowchart LR
-    subgraph ApiProcess["Proceso Java · perfil api"]
-        Cliente[Cliente / frontend] --> Controller[POST /api/orders]
-        Controller --> Producer[OrderProducer]
-    end
+Copy-Item .env.example .env
+# Completar localmente las variables necesarias; no publicar .env.
 
-    subgraph Broker["RabbitMQ · mismo vhost"]
-        OrdersX{{bikestore.orders}}
-        PaymentQ[(bikestore.payment)]
-        RetryX{{bikestore.retry}}
-        RetryQ[(bikestore.payment.retry · TTL 750 ms)]
-        EventsX{{bikestore.events}}
-        EmailQ[(bikestore.email)]
-        DeadX{{bikestore.dead}}
-        Dlq[(bikestore.payment.dead)]
-        OrdersX -->|payment.requested| PaymentQ
-        RetryX -->|payment.retry| RetryQ
-        RetryQ -->|dead-letter · payment.requested| PaymentQ
-        EventsX -->|payment.paid| EmailQ
-        DeadX -->|payment.failed| Dlq
-    end
-
-    subgraph PaymentProcess["Proceso Java · perfil payment"]
-        Payment[PaymentWorker]
-    end
-    subgraph EmailProcess["Proceso Java · perfil email"]
-        Email[EmailWorker]
-    end
-
-    Producer -->|JSON persistente + confirmación| OrdersX
-    PaymentQ --> Payment
-    Payment -->|fallos 1–3| RetryX
-    Payment -->|PAID| EventsX
-    Payment -->|fallo 4| DeadX
-    EmailQ --> Email
-```
-
-El JAR admite cuatro modos excluyentes. Si no se activa un perfil, `spring.profiles.default=integrated` conserva el modo de desarrollo existente: API y ambos consumidores en una JVM. Los perfiles `api`, `payment` y `email` cargan solo el rol indicado; payment y email configuran Spring sin servidor web. Una validación de arranque rechaza combinaciones de perfiles de rol.
-
-### Ejecutar tres procesos en Windows
-
-Inicia RabbitMQ de BikeStore y compila el JAR una sola vez:
-
-```powershell
 docker compose up -d rabbitmq
 docker compose ps
+
+.\mvnw.cmd spring-boot:run
+~~~
+
+Spring Boot carga el .env local y usa 127.0.0.1 como host predeterminado de RabbitMQ. El comando spring-boot:run activa el modo integrado por defecto: API, PaymentWorker y EmailWorker en una sola JVM. La tienda queda disponible en http://localhost:8080/; RabbitMQ Management se consulta en http://127.0.0.1:15672/.
+
+El archivo .env está excluido de Git. La plantilla .env.example documenta los nombres de configuración, pero no contiene credenciales reales.
+
+## 11. Ejecución local: tres procesos Java
+
+El modo distribuido mantiene un único proyecto Maven y JAR. Primero genera el ejecutable una vez:
+
+~~~powershell
 .\mvnw.cmd -DskipTests package
-```
+~~~
 
-Abre tres terminales PowerShell en la raíz del repositorio y ejecuta un comando en cada una:
+Abre tres terminales PowerShell en la raíz del repositorio. Inicia una función distinta en cada terminal:
 
-```powershell
+~~~powershell
+# Terminal 1: API, frontend y productor; puerto 8080
 java -jar target\bikestore-async-0.0.1-SNAPSHOT.jar --spring.profiles.active=api
-```
+~~~
 
-```powershell
+~~~powershell
+# Terminal 2: solo PaymentWorker; no inicia servidor web
 java -jar target\bikestore-async-0.0.1-SNAPSHOT.jar --spring.profiles.active=payment
-```
+~~~
 
-```powershell
+~~~powershell
+# Terminal 3: solo EmailWorker; no inicia servidor web
 java -jar target\bikestore-async-0.0.1-SNAPSHOT.jar --spring.profiles.active=email
-```
+~~~
 
-El API atiende el puerto `8080`; los dos workers no abren puertos HTTP. Cada terminal inicia su propia JVM. Para detener un rol, pulsa `Ctrl+C` en su terminal. La conexión y las credenciales se leen de `.env`, importado desde la raíz; el perfil de cada terminal cambia únicamente sus componentes.
+Cada terminal aloja un proceso Java independiente. El worker de pago y el worker de correo no ocupan el puerto 8080. Se detiene cada uno con Ctrl+C en su propia terminal; detener un proceso no detiene los otros.
 
-En RabbitMQ Management (`http://127.0.0.1:15672`), revisa **Connections** para ver las conexiones de los procesos y **Queues** para comprobar un consumidor en `bikestore.payment` y otro en `bikestore.email`. El perfil `api` abre su conexión al publicar el primer pedido; payment y email la abren al conectarse. Usa las credenciales locales de `.env`. Ejecuta el modo integrado o los tres procesos distribuidos en una sesión, no ambos a la vez.
+Si el archivo JAR de target está bloqueado por una instancia existente en Windows, el empaquetado alternativo crea otra copia sin reemplazarlo:
 
- 
-#### Empaquetado seguro cuando el JAR está en uso (Windows)
-
-Si una instancia Java está usando `target/bikestore-async-0.0.1-SNAPSHOT.jar`, Windows puede impedir que Maven lo reemplace. **No es necesario finalizar ese proceso ni borrar el JAR** para generar una nueva compilación. Utiliza el perfil Maven opcional:
-
-```powershell
+~~~powershell
 .\mvnw.cmd -Pempaquetado-alternativo -DskipTests package
-```
+java -jar target\empaquetado-alternativo\bikestore-async-0.0.1-SNAPSHOT.jar --spring.profiles.active=api
+~~~
 
-El nuevo ejecutable se genera en `target/empaquetado-alternativo/bikestore-async-0.0.1-SNAPSHOT.jar` y el JAR anterior permanece intacto. La compilación normal `.\mvnw.cmd -DskipTests package` continúa usando `target/`.
+Ese perfil de Maven solo cambia la ruta de salida del artefacto; la compilación normal conserva target como destino.
 
-El JAR alternativo **no sustituye al proceso que está ejecutándose**: para iniciar el nuevo código en el puerto 8080, detén manualmente la instancia anterior con `Ctrl+C` y después inicia la nueva. No ejecutes ambos modos de la aplicación a la vez contra las mismas colas. Las pruebas unitarias y de integración deben ejecutarse por separado; `-DskipTests` solo omite su ejecución durante ese empaquetado.
+En RabbitMQ Management, revisa **Connections** para las conexiones y **Queues** para los consumidores de bikestore.payment y bikestore.email. La API abre su conexión al publicar el primer pedido; los workers la abren al iniciar. Se debe ejecutar el modo integrado **o** los tres procesos, no ambos simultáneamente, porque consumidores conectados a una misma cola compiten por sus mensajes.
 
+El modo integrado sigue disponible con .\mvnw.cmd spring-boot:run; los perfiles distribuidos son una forma adicional de demostrar independencia.
 
-### Exchanges, rutas y colas
+## 12. GitHub Pages: demostración visual estática
 
-| Exchange | Routing key | Cola | Uso |
-| --- | --- | --- | --- |
-| `bikestore.orders` | `payment.requested` | `bikestore.payment` | Pedidos pendientes de pago |
-| `bikestore.retry` | `payment.retry` | `bikestore.payment.retry` | Espera de 750 ms antes de otro intento |
-| `bikestore.events` | `payment.paid` | `bikestore.email` | Confirmaciones después del pago |
-| `bikestore.dead` | `payment.failed` | `bikestore.payment.dead` | Fallos definitivos y mensajes rechazados |
+La [demostración online](https://juliomm8.github.io/bikestore-async/) permite revisar el catálogo, filtrar categorías, abrir fichas rápidas, cambiar el tema y modificar un carrito guardado en localStorage. Los precios y el total que muestra esa página son estimaciones visuales.
 
-`OrderProducer` publica el JSON persistente con `messageId=pedidoId` y espera publisher confirms. `PaymentWorker` usa 50 % de probabilidad de aprobación por intento en los modos normales; `failedAttempts` limita el flujo a cuatro intentos totales. La cola retry espera 750 ms. Tras el cuarto fallo, el productor publica `FailedPayment` en la DLQ. Los listeners usan reconocimiento manual y reconocen el mensaje original después de confirmar la siguiente publicación. Como no hay almacenamiento de idempotencia, un fallo excepcional al confirmar una publicación podría producir una entrega repetida.
+Pages no tiene el backend ni RabbitMQ. La confirmación del pedido se desactiva y no se generan identificadores, cobros, mensajes ni correos ficticios. El flujo completo requiere la aplicación local y el broker. La verificación pública y sus límites están descritos en [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
-`EmailWorker` consume exclusivamente la cola del evento `payment.paid`; verifica `paymentStatus=PAID` antes de registrar el correo simulado y el resumen de bicicletas. Las colas duraderas conservan pedidos mientras un proceso worker está detenido. Si PaymentWorker no está disponible, la API aún puede confirmar la publicación `202` y RabbitMQ mantiene el pedido en `bikestore.payment`. Si EmailWorker no está disponible, el pago puede terminar como `PAID` y la confirmación permanece en `bikestore.email`; al reiniciarlo, continúa desde esa cola. Todos los eventos incluyen `pedidoId`, `timestamp`, `thread`, evento y detalle.
+## 13. Evidencia visual tomada en local
 
-### Pruebas y evidencia
+Las capturas siguientes se guardan en el repositorio y corresponden a la tienda local, RabbitMQ Management o a los archivos de evidencia de pruebas. Los datos de los ejemplos son académicos; no se incluyen contraseñas. Las capturas de Management ocultan el nombre de usuario. Las colas del vhost principal se documentan como una observación puntual: no fueron purgadas ni consumidas durante esta revisión. Los escenarios automatizados de RabbitMQ se aislaron en bikestore-evaluation-demo.
 
-Pruebas unitarias deterministas (sin iniciar la aplicación en `8080`):
+### Frontend
 
-```powershell
+<p align="center">
+  <img src="docs/capturas/tienda-escritorio.jpg" alt="Pantalla principal de BikeStore en escritorio" width="820">
+</p>
+<p align="center"><em>Figura 1. Página principal local con la composición editorial de la tienda.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/catalogo-escritorio.jpg" alt="Catálogo de bicicletas en escritorio" width="820">
+</p>
+<p align="center"><em>Figura 2. Catálogo local con sus modelos y filtros.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/carrito-escritorio.jpg" alt="Carrito lateral en escritorio" width="720">
+</p>
+<p align="center"><em>Figura 3. Carrito lateral en escritorio.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/tienda-movil.jpg" alt="Tienda BikeStore en móvil" width="320">
+</p>
+<p align="center"><em>Figura 4. Presentación móvil con tema oscuro.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/carrito-movil.jpg" alt="Carrito BikeStore en móvil" width="320">
+</p>
+<p align="center"><em>Figura 5. Carrito adaptado a móvil.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/pedido-aceptado-frontend.jpg" alt="Confirmación local con pedidoId real de la API" width="820">
+</p>
+<p align="center"><em>Figura 6. Confirmación de aceptación recibida desde la API local. La pantalla indica que el pago sigue procesándose de forma asíncrona; el resultado posterior se verificó en los logs.</em></p>
+
+### RabbitMQ, reintentos y DLQ
+
+<details>
+  <summary>Ver capturas de RabbitMQ Management y mensajes de prueba</summary>
+
+<p align="center">
+  <img src="docs/capturas/rabbitmq-panel.jpg" alt="Panel Overview de RabbitMQ Management" width="820">
+</p>
+<p align="center"><em>Figura 7. Panel de RabbitMQ Management conectado al contenedor de BikeStore.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/rabbitmq-colas-principal.jpg" alt="Colas del vhost principal de RabbitMQ" width="820">
+</p>
+<p align="center"><em>Figura 8. Snapshot de las colas en el vhost principal. En la captura había cinco mensajes sin reconocer en pago, uno sin reconocer en correo, uno listo en la DLQ y ninguno en reintentos. Se dejó el estado intacto.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/rabbitmq-reintentos.jpg" alt="Configuración de la cola de reintentos" width="820">
+</p>
+<p align="center"><em>Figura 9. Cola de reintentos con TTL de 750 ms y retorno a la ruta de pago; no había mensajes en espera al capturarla.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/rabbitmq-dlq.jpg" alt="Detalle de la cola DLQ en RabbitMQ Management" width="820">
+</p>
+<p align="center"><em>Figura 10. La DLQ principal conservaba un mensaje listo. La captura muestra el conteo; no se recuperó ni se reconoció ese mensaje.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/mensaje-dlq.jpg" alt="Contenido JSON de un fallo definitivo aislado" width="760">
+</p>
+<p align="center"><em>Figura 11. Mensaje FailedPayment de una prueba aislada: mantiene el pedidoId, cuatro intentos y el motivo del fallo.</em></p>
+</details>
+
+### Trazabilidad y ejecución por procesos
+
+<p align="center">
+  <img src="docs/capturas/logs-trazabilidad.jpg" alt="Logs de procesamiento con pedidoId, timestamp, thread y evento" width="820">
+</p>
+<p align="center"><em>Figura 12. Eventos observados con pedidoId, timestamp, thread, evento y detalle.</em></p>
+
+<p align="center">
+  <img src="docs/capturas/procesos-independientes.jpg" alt="Procesos Java separados para API, pago y correo" width="760">
+</p>
+<p align="center"><em>Figura 13. Evidencia de ejecución de API, payment y email como procesos con PID independientes.</em></p>
+
+La captura de aceptación del 1 de noviembre de 2026 se obtuvo con API, PaymentWorker y EmailWorker separados y conectados al vhost de evaluación. El mismo pedidoId aparece en la aceptación, el pago y la confirmación simulada. Al terminar, las cuatro colas de ese vhost tenían cero mensajes y cero consumidores; la instancia previa en el puerto 8080 y el vhost principal permanecieron intactos. El detalle está en [docs/PRUEBAS.md](docs/PRUEBAS.md).
+
+## 14. Pruebas ejecutadas
+
+La documentación separa pruebas unitarias, pruebas con RabbitMQ y comprobaciones de navegador. El workflow de [CI](.github/workflows/ci.yml) configura Java 17 y Node, ejecuta las pruebas unitarias y JavaScript, valida sintaxis y empaqueta con Maven. No ejecuta los escenarios RabbitMQ que dependen del broker local; estos se lanzan por separado con un runner que comprueba el vhost aislado. Los resultados detallados, comandos, límites y fragmentos de logs se mantienen en [docs/PRUEBAS.md](docs/PRUEBAS.md).
+
+| Comprobación | Resultado documentado | Evidencia |
+| --- | --- | --- |
+| 21 pruebas unitarias Java sin RabbitMQ | Aprobadas en Maven y en CI | [CI](https://github.com/Juliomm8/bikestore-async/actions/workflows/ci.yml), [detalle](docs/PRUEBAS.md) |
+| Pruebas JavaScript y sintaxis | Pruebas de carrito/persistencia y preparación de Pages aprobadas; archivos importantes pasan node --check | [detalle de comandos](docs/PRUEBAS.md) |
+| Empaquetado Maven | Generación del JAR ejecutable comprobada | [resultados](docs/PRUEBAS.md) |
+| Integración con RabbitMQ real | 9 casos deterministas en el vhost aislado: API, JSON persistente, reintentos, pago, DLQ y ausencia de correo al fallar | [resultados y artefactos](docs/DEMOSTRACION.md) |
+| Separación de procesos | API, payment y email iniciados y detenidos de forma independiente; workers sin servidor web | [evidencia](docs/DEMOSTRACION.md) |
+| GitHub Pages | URL pública respondió y se revisó en Chromium; no llamó a la API ni mostró errores de consola | [verificación y límites](docs/PRUEBAS.md) |
+
+Los scripts que usan integración verifican primero el vhost de evaluación y abortan si detectan mensajes o consumidores preexistentes. No se deben ejecutar mientras haya trabajo en ese vhost. No vacían colas del vhost principal.
+
+Comandos locales para las comprobaciones no destructivas descritas por la documentación:
+
+~~~powershell
 .\mvnw.cmd -q "-Dtest=ProcessProfileValidatorTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,OrderSubmissionServiceTest,OrderControllerMvcTest,OrderControllerTest,AssetCacheFilterTest" test
-```
+node --check src/main/resources/static/js/store.js
+node --check scripts/prepare-github-pages.mjs
+node --test src/test/javascript/cart-storage.test.cjs
+node --test scripts/prepare-github-pages.test.mjs
+.\mvnw.cmd -DskipTests package
+~~~
 
-Prueba reproducible de los procesos reales. Requiere compilar primero el JAR; usa solo `bikestore-evaluation-demo`, verifica el vhost y que sus colas estén vacías, inicia y detiene únicamente los PID que creó:
+Para los escenarios reales de RabbitMQ y los procesos separados, consulta [docs/DEMOSTRACION.md](docs/DEMOSTRACION.md) y [docs/PRUEBAS.md](docs/PRUEBAS.md) antes de ejecutar los scripts, especialmente sus condiciones de aislamiento y estado inicial.
 
-```powershell
-.\scripts\Test-ProcesosIndependientes.ps1
-```
+## 15. Estructura del repositorio
 
-Para los escenarios RabbitMQ con decisiones deterministas en el contexto de pruebas:
+~~~text
+.github/workflows/          CI y publicación de GitHub Pages
+docs/                       arquitectura, pruebas, imágenes y evidencia
+docs/capturas/               capturas visuales incluidas en este README
+scripts/                    runners de pruebas aisladas y preparación de Pages
+src/main/java/.../api/       endpoint y coordinación del pedido
+src/main/java/.../catalog/  catálogo y precios oficiales del servidor
+src/main/java/.../config/   topología RabbitMQ y validación de perfiles
+src/main/java/.../email/    consumidor y confirmación de correo simulada
+src/main/java/.../messaging/ productor, confirmaciones y trazabilidad
+src/main/java/.../payment/  consumidor, decisiones y reintentos de pago
+src/main/resources/static/  frontend servido por Spring Boot y Pages
+src/test/java/              pruebas unitarias y de integración Java
+src/test/javascript/        pruebas del carrito y persistencia
+pom.xml                     configuración Maven y Java 17
+docker-compose.yml          RabbitMQ para el entorno local de BikeStore
+~~~
 
-```powershell
-.\scripts\Run-RabbitMqDemostracion.ps1
-```
+## 16. Conclusiones y límites
 
-Las dos pruebas de integración confirman el vhost antes de operar. Los scripts abortan si encuentran trabajo o consumidores previos en el vhost de evaluación; nunca purgan el vhost principal. Consulta [docs/DEMOSTRACION.md](docs/DEMOSTRACION.md) para el flujo por proceso, los resultados de tolerancia a fallos y los artefactos capturados, y [docs/PRUEBAS.md](docs/PRUEBAS.md) para los comandos y resultados observados.
+El proyecto implementa el flujo pedido → publicación JSON → pago asíncrono → evento PAID o DLQ. Los consumidores pueden ejecutarse dentro del modo integrado o como procesos Java separados y se comunican por colas RabbitMQ. Las pruebas deterministas cubren éxito, reintentos, fallo definitivo y la condición de correo.
 
-## Pruebas
-
-Las pruebas unitarias deterministas cubren el contrato REST, el precio autoritativo, el mensaje único del carrito, el pago exitoso, los reintentos, la DLQ y la notificación de correo. Para ejecutarlas sin iniciar una aplicación en el puerto 8080:
-
-```powershell
-.\mvnw.cmd -q "-Dtest=ProcessProfileValidatorTest,OrderControllerMvcTest,OrderControllerTest,OrderSubmissionServiceTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,AssetCacheFilterTest" test
-.\mvnw.cmd -q -DskipTests package
-```
-
-Para demostrar el flujo completo con RabbitMQ real sin tocar el vhost principal, usa el runner aislado:
-
-```powershell
-.\scripts\Run-RabbitMqDemostracion.ps1
-```
-
-El runner verifica que las colas del vhost `bikestore-evaluation-demo` no tengan mensajes ni consumidores, y fija ese vhost en las pruebas que preparan escenarios de pago. No purga colas del vhost principal. Consulta [docs/DEMOSTRACION.md](docs/DEMOSTRACION.md) para el diagrama, la ejecución por procesos y los resultados; los resultados acumulados están en [docs/PRUEBAS.md](docs/PRUEBAS.md).
-
-## Recursos estáticos y caché
-
-Las fotografías locales se sirven en WebP y las URL de CSS, JavaScript, fuentes e imágenes llevan la versión `BIKESTORE_ASSET_VERSION` definida en `static/index.html`. Cuando se cambie un recurso estático, actualiza esa versión también en las URL de fuentes de `static/css/store.css`. El filtro `AssetCacheFilter` sirve los recursos versionados con un año de caché inmutable; los archivos sin versión deben revalidarse y el HTML no se guarda en caché. Las respuestas de `/api/**` usan `private, no-store` para no conservar pedidos ni operaciones. Las mediciones antes/después están en [docs/PRUEBAS.md](docs/PRUEBAS.md).
-
-Si existe una cola `bikestore.payment` creada con una versión anterior sin dead-letter exchange, RabbitMQ rechazará cambiar sus argumentos en caliente. Antes de migrarla, inspecciona sus mensajes y procesa o conserva cualquier pedido pendiente; solo cuando esté vacía se puede eliminar esa cola específica para que la aplicación la declare de nuevo.
+La solución se mantiene dentro del alcance académico: no almacena pedidos en una base de datos, no realiza cargos ni envía correo real, y los precios del catálogo son demostrativos aunque se calculan en el backend para cada pedido. GitHub Pages permite una revisión visual, pero la ejecución completa requiere Java, Docker y RabbitMQ localmente.
