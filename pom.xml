@@ -62,4 +62,14 @@
 		</plugins>
 	</build>
 
+	<!-- Permite crear un JAR sin sobrescribir el que usa una JVM activa en Windows. -->
+	<profiles>
+		<profile>
+			<id>empaquetado-alternativo</id>
+			<build>
+				<directory>${project.basedir}/target/empaquetado-alternativo</directory>
+			</build>
+		</profile>
+	</profiles>
+
 </project>
