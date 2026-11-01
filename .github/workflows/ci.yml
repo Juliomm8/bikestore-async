@@ -55,3 +55,9 @@ jobs:
 
       - name: Empaquetar sin repetir las pruebas
         run: bash ./mvnw -B -ntp -DskipTests package
+
+      - name: Verificar empaquetado alternativo
+        run: |
+          bash ./mvnw -B -ntp -Pempaquetado-alternativo -DskipTests package
+          test -f target/empaquetado-alternativo/bikestore-async-0.0.1-SNAPSHOT.jar
+          jar tf target/empaquetado-alternativo/bikestore-async-0.0.1-SNAPSHOT.jar | grep -q '^BOOT-INF/'
