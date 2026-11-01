@@ -1,0 +1,57 @@
+name: Verificar proyecto
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Java 17 y Node.js 24
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Configurar Java 17 y caché Maven
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Configurar Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Comprobar sintaxis JavaScript
+        run: |
+          node --check src/main/resources/static/js/catalog.js
+          node --check src/main/resources/static/js/cart-storage.js
+          node --check src/main/resources/static/js/store.js
+          node --check scripts/prepare-github-pages.mjs
+          node --check src/test/javascript/cart-storage.test.cjs
+          node --check scripts/prepare-github-pages.test.mjs
+
+      - name: Ejecutar pruebas JavaScript
+        run: node --test src/test/javascript/cart-storage.test.cjs scripts/prepare-github-pages.test.mjs
+
+      - name: Ejecutar las 21 pruebas Java sin RabbitMQ
+        run: bash ./mvnw -B -ntp "-Dtest=ProcessProfileValidatorTest,OrderProducerTest,PaymentWorkerTest,EmailWorkerTest,OrderEventLoggerTest,OrderSubmissionServiceTest,OrderControllerMvcTest,OrderControllerTest,AssetCacheFilterTest" test
+
+      - name: Empaquetar sin repetir las pruebas
+        run: bash ./mvnw -B -ntp -DskipTests package
