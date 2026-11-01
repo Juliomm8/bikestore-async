@@ -40,10 +40,12 @@ test('prepara solo el frontend y activa un modo estático sin formulario de pedi
   const html = await readFile(path.join(outputDir, 'index.html'), 'utf8');
   const storeJs = await readFile(path.join(outputDir, 'js/store.js'), 'utf8');
   assert.match(html, /<meta name="bikestore-mode" content="static">/);
+  assert.match(html, /<body data-bikestore-mode="static">/);
   assert.match(html, /id="static-demo-banner" aria-label="Demostración visual"/);
   assert.match(html, /id="static-order-note">/);
   assert.match(html, /<form id="order-form" novalidate hidden>/);
   assert.match(storeJs, /if \(staticDemo\) return;/);
+  assert.match(storeJs, /\$\('\.site-nav__order'\)\.textContent = 'Ver resumen del carrito';/);
   assert.ok(await exists(path.join(outputDir, '.nojekyll')));
   assert.equal(await exists(path.join(outputDir, 'src')), false);
   assert.equal(await exists(path.join(outputDir, 'docs')), false);

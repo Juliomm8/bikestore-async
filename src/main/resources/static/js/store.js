@@ -68,6 +68,7 @@ if (staticDemo) {
   $('#cart-drawer-description').textContent = 'Tu selección se guarda en este navegador para esta demostración visual.';
   $('#drawer-price-note').textContent = 'Total estimado del catálogo. No se envía ningún pedido ni se procesa un pago.';
   drawerContinue.textContent = 'Ver resumen del carrito';
+  $('.site-nav__order').textContent = 'Ver resumen del carrito';
 }
 
 const findProduct = id => products.find(product => product.id === id);

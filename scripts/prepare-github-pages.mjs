@@ -40,6 +40,8 @@ export async function preparePagesSite({ sourceDir = staticSource, outputDir = d
     '$1', 'la nota del pedido');
   html = replaceExactlyOnce(html, /(<form id="order-form" novalidate)>/g,
     '$1 hidden>', 'el formulario local');
+  html = replaceExactlyOnce(html, /<body>/g,
+    '<body data-bikestore-mode="static">', 'el contexto visual estático');
   await writeFile(indexPath, html, 'utf8');
   await writeFile(path.join(output, '.nojekyll'), '', 'utf8');
 

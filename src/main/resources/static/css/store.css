@@ -71,6 +71,7 @@ code { font-size: .9em; }
   color: #fff; transition: background-color .4s var(--ease), color .4s var(--ease), border-color .4s var(--ease);
   border-bottom: 1px solid transparent;
 }
+body[data-bikestore-mode="static"] .site-header { background: var(--bone); color: var(--ink); border-color: var(--line); }
 .site-header.is-solid, .site-header.is-open { background: var(--bone); color: var(--ink); border-color: var(--line); }
 .wordmark {
   font: 500 1.6rem/1 var(--serif); letter-spacing: -.01em; text-decoration: none;
